@@ -1,3 +1,4 @@
 *.lst
 *.o
 *.d
+.vscode
