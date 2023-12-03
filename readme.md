@@ -1,6 +1,6 @@
 ### Readme
 这是从SEGGER官网获取的6.14版本的RTT文件,并加入了jlink烧录、擦除的脚本,两个文件都在`jlinkscript`中,建议直接引用本文件为submodbule,'并在MakeFile中加入:
-```c
+```makefile
 # *** EOF ***
 flash: all
 	@echo "Uploading to firmware..."
