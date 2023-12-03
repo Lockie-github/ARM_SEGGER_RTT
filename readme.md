@@ -4,7 +4,8 @@
 # *** EOF ***
 flash: all
 	@echo "Uploading to firmware..."
-	-JLinkExe  -Device $(MCU_ID) -CommandFile ./ARM_SEGGER_RTT/jlinkscript/flash.jlink
+	sed "s/{{TARGET}}/$(TARGET)/g" ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > flash.jlink
+	-JLinkExe  -Device $(MCU_ID) -CommandFile flash.jlink
 
 erase:
 	@echo "Erase chip..."
@@ -18,6 +19,6 @@ rtt:
 	while true; do sleep 1; telnet 127.0.0.1 9999; done
 fr: all
 	@echo "flash & run"
-	-JLinkExe  -Device $(MCU_ID) -CommandFile ./ARM_SEGGER_RTT/jlinkscript/flash.jlink
-	-JLinkExe  -Device $(MCU_ID) -if SWD -Speed 2400 -RTTTelnetPort 9999 -autoconnect 1
+	$(MAKE) flash
+	$(MAKE) run
 ```
