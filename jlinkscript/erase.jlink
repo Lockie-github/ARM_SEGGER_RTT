@@ -1,0 +1,7 @@
+speed 2400
+si swd
+connect
+r
+erase
+exit
+

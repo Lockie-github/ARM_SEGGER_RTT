@@ -1,0 +1,7 @@
+speed 2400
+si swd
+connect
+loadfile build/pwm.hex
+r
+g
+qc
