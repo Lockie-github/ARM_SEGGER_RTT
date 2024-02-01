@@ -2,6 +2,13 @@
 这是从SEGGER官网获取的6.14版本的RTT文件,并加入了jlink烧录、擦除的脚本,两个文件都在`jlinkscript`中,建议直接引用本文件为submodbule,'并在MakeFile中加入:
 ```makefile
 # *** EOF ***
+
+#自动获取当前MCU的型号,仅限于STM32CubeMX生成的Makefile
+MCU_ID = $(shell echo $(LDSCRIPT) | cut -c1-11)
+
+print:
+	@echo "Target Chip: $(MCU_ID)"
+
 flash: all
 	@echo "Uploading to firmware..."
 	sed "s/{{TARGET}}/$(TARGET)/g" ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > flash.jlink
