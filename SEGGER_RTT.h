@@ -68,7 +68,21 @@ Revision: $Rev: 4351 $
 #define SEGGER_RTT_H
 
 #include "SEGGER_RTT_Conf.h"
-#define myprintf(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+
+/*********************************************************************
+*
+*       Configuration
+*
+**********************************************************************
+*/
+
+//
+// Log system configuration flags
+//
+#define LOG_ENABLE_INFO     1  // Enable info-level logs. Set to 1 to enable, 0 to disable.
+#define LOG_ENABLE_ERROR    1  // Enable error-level logs. Set to 1 to enable, 0 to disable.
+#define LOG_ENABLE_DEBUG    1  // Enable debug-level logs. Set to 1 to enable, 0 to disable.
+
 /*********************************************************************
 *
 *       Defines, fixed
@@ -242,6 +256,75 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #define RTT_CTRL_BG_BRIGHT_CYAN       "[4;46m"
 #define RTT_CTRL_BG_BRIGHT_WHITE      "[4;47m"
 
+/*********************************************************************
+*
+*        Logging Macro (require SEGGER_RTT_printf.c)
+*
+**********************************************************************
+*/
+
+//
+// Base macro for logging
+//   level: Log level string (e.g. "INFO", "DEBUG")
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: Adds newline automatically and outputs via SEGGER RTT channel 0
+//
+#define log_base(level, fmt, ...) SEGGER_RTT_printf(0, "[" level "] " fmt "\n", ##__VA_ARGS__)
+
+//
+// Info-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright green text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_INFO == 0
+//
+#if LOG_ENABLE_INFO
+    #define log_info(fmt, ...) \
+        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_GREEN); \
+        log_base("INFO", fmt, ##__VA_ARGS__); \
+        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+#else
+    #define log_info(fmt, ...) do {} while(0)
+#endif
+
+//
+// Debug-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright blue text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_DEBUG == 0
+//
+#if LOG_ENABLE_DEBUG
+    #define log_debug(fmt, ...) \
+        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_BLUE); \
+        log_base("DEBUG", fmt, ##__VA_ARGS__); \
+        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+#else
+    #define log_debug(fmt, ...) do {} while(0)
+#endif
+
+//
+// Error-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright red text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_ERROR == 0
+//
+#if LOG_ENABLE_ERROR
+    #define log_error(fmt, ...) \
+        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_RED); \
+        log_base("ERROR", fmt, ##__VA_ARGS__); \
+        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+#else
+    #define log_error(fmt, ...) do {} while(0)
+#endif
 
 #endif
 
