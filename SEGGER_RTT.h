@@ -82,6 +82,7 @@ Revision: $Rev: 4351 $
 #define LOG_ENABLE_INFO     1  // Enable info-level logs. Set to 1 to enable, 0 to disable.
 #define LOG_ENABLE_ERROR    1  // Enable error-level logs. Set to 1 to enable, 0 to disable.
 #define LOG_ENABLE_DEBUG    1  // Enable debug-level logs. Set to 1 to enable, 0 to disable.
+#define LOG_ENABLE_PRINT    1  // Enable debug-level logs. Set to 1 to enable, 0 to disable.
 
 /*********************************************************************
 *
@@ -217,44 +218,44 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 // Control sequences, based on ANSI.
 // Can be used to control color, and clear the screen
 //
-#define RTT_CTRL_RESET                "[0m"         // Reset to default colors
-#define RTT_CTRL_CLEAR                "[2J"         // Clear screen, reposition cursor to top left
+#define RTT_CTRL_RESET                "\x1b[0m"         // Reset to default colors
+#define RTT_CTRL_CLEAR                "\x1b[2J"         // Clear screen, reposition cursor to top left
 
-#define RTT_CTRL_TEXT_BLACK           "[2;30m"
-#define RTT_CTRL_TEXT_RED             "[2;31m"
-#define RTT_CTRL_TEXT_GREEN           "[2;32m"
-#define RTT_CTRL_TEXT_YELLOW          "[2;33m"
-#define RTT_CTRL_TEXT_BLUE            "[2;34m"
-#define RTT_CTRL_TEXT_MAGENTA         "[2;35m"
-#define RTT_CTRL_TEXT_CYAN            "[2;36m"
-#define RTT_CTRL_TEXT_WHITE           "[2;37m"
+#define RTT_CTRL_TEXT_BLACK           "\x1b[2;30m"
+#define RTT_CTRL_TEXT_RED             "\x1b[2;31m"
+#define RTT_CTRL_TEXT_GREEN           "\x1b[2;32m"
+#define RTT_CTRL_TEXT_YELLOW          "\x1b[2;33m"
+#define RTT_CTRL_TEXT_BLUE            "\x1b[2;34m"
+#define RTT_CTRL_TEXT_MAGENTA         "\x1b[2;35m"
+#define RTT_CTRL_TEXT_CYAN            "\x1b[2;36m"
+#define RTT_CTRL_TEXT_WHITE           "\x1b[2;37m"
 
-#define RTT_CTRL_TEXT_BRIGHT_BLACK    "[1;30m"
-#define RTT_CTRL_TEXT_BRIGHT_RED      "[1;31m"
-#define RTT_CTRL_TEXT_BRIGHT_GREEN    "[1;32m"
-#define RTT_CTRL_TEXT_BRIGHT_YELLOW   "[1;33m"
-#define RTT_CTRL_TEXT_BRIGHT_BLUE     "[1;34m"
-#define RTT_CTRL_TEXT_BRIGHT_MAGENTA  "[1;35m"
-#define RTT_CTRL_TEXT_BRIGHT_CYAN     "[1;36m"
-#define RTT_CTRL_TEXT_BRIGHT_WHITE    "[1;37m"
+#define RTT_CTRL_TEXT_BRIGHT_BLACK    "\x1b[1;30m"
+#define RTT_CTRL_TEXT_BRIGHT_RED      "\x1b[1;31m"
+#define RTT_CTRL_TEXT_BRIGHT_GREEN    "\x1b[1;32m"
+#define RTT_CTRL_TEXT_BRIGHT_YELLOW   "\x1b[1;33m"
+#define RTT_CTRL_TEXT_BRIGHT_BLUE     "\x1b[1;34m"
+#define RTT_CTRL_TEXT_BRIGHT_MAGENTA  "\x1b[1;35m"
+#define RTT_CTRL_TEXT_BRIGHT_CYAN     "\x1b[1;36m"
+#define RTT_CTRL_TEXT_BRIGHT_WHITE    "\x1b[1;37m"
 
-#define RTT_CTRL_BG_BLACK             "[24;40m"
-#define RTT_CTRL_BG_RED               "[24;41m"
-#define RTT_CTRL_BG_GREEN             "[24;42m"
-#define RTT_CTRL_BG_YELLOW            "[24;43m"
-#define RTT_CTRL_BG_BLUE              "[24;44m"
-#define RTT_CTRL_BG_MAGENTA           "[24;45m"
-#define RTT_CTRL_BG_CYAN              "[24;46m"
-#define RTT_CTRL_BG_WHITE             "[24;47m"
+#define RTT_CTRL_BG_BLACK             "\x1b[24;40m"
+#define RTT_CTRL_BG_RED               "\x1b[24;41m"
+#define RTT_CTRL_BG_GREEN             "\x1b[24;42m"
+#define RTT_CTRL_BG_YELLOW            "\x1b[24;43m"
+#define RTT_CTRL_BG_BLUE              "\x1b[24;44m"
+#define RTT_CTRL_BG_MAGENTA           "\x1b[24;45m"
+#define RTT_CTRL_BG_CYAN              "\x1b[24;46m"
+#define RTT_CTRL_BG_WHITE             "\x1b[24;47m"
 
-#define RTT_CTRL_BG_BRIGHT_BLACK      "[4;40m"
-#define RTT_CTRL_BG_BRIGHT_RED        "[4;41m"
-#define RTT_CTRL_BG_BRIGHT_GREEN      "[4;42m"
-#define RTT_CTRL_BG_BRIGHT_YELLOW     "[4;43m"
-#define RTT_CTRL_BG_BRIGHT_BLUE       "[4;44m"
-#define RTT_CTRL_BG_BRIGHT_MAGENTA    "[4;45m"
-#define RTT_CTRL_BG_BRIGHT_CYAN       "[4;46m"
-#define RTT_CTRL_BG_BRIGHT_WHITE      "[4;47m"
+#define RTT_CTRL_BG_BRIGHT_BLACK      "\x1b[4;40m"
+#define RTT_CTRL_BG_BRIGHT_RED        "\x1b[4;41m"
+#define RTT_CTRL_BG_BRIGHT_GREEN      "\x1b[4;42m"
+#define RTT_CTRL_BG_BRIGHT_YELLOW     "\x1b[4;43m"
+#define RTT_CTRL_BG_BRIGHT_BLUE       "\x1b[4;44m"
+#define RTT_CTRL_BG_BRIGHT_MAGENTA    "\x1b[4;45m"
+#define RTT_CTRL_BG_BRIGHT_CYAN       "\x1b[4;46m"
+#define RTT_CTRL_BG_BRIGHT_WHITE      "\x1b[4;47m"
 
 /*********************************************************************
 *
@@ -283,9 +284,10 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 //
 #if LOG_ENABLE_INFO
     #define log_info(fmt, ...) \
-        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_GREEN); \
-        log_base("INFO", fmt, ##__VA_ARGS__); \
-        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+        SEGGER_RTT_printf(0, "%s[INFO] " fmt "%s\n", \
+                         RTT_CTRL_TEXT_BRIGHT_GREEN, \
+                         ##__VA_ARGS__, \
+                         RTT_CTRL_RESET)
 #else
     #define log_info(fmt, ...) do {} while(0)
 #endif
@@ -301,9 +303,10 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 //
 #if LOG_ENABLE_DEBUG
     #define log_debug(fmt, ...) \
-        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_BLUE); \
-        log_base("DEBUG", fmt, ##__VA_ARGS__); \
-        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+        SEGGER_RTT_printf(0, "%s[DEBUG] " fmt "%s\n", \
+                         RTT_CTRL_TEXT_BRIGHT_BLUE, \
+                         ##__VA_ARGS__, \
+                         RTT_CTRL_RESET)
 #else
     #define log_debug(fmt, ...) do {} while(0)
 #endif
@@ -318,12 +321,28 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 //   - Expands to empty statement when LOG_ENABLE_ERROR == 0
 //
 #if LOG_ENABLE_ERROR
-    #define log_error(fmt, ...) \
-        SEGGER_RTT_printf(0, RTT_CTRL_TEXT_BRIGHT_RED); \
-        log_base("ERROR", fmt, ##__VA_ARGS__); \
-        SEGGER_RTT_printf(0, RTT_CTRL_RESET);
+    #define log_err(fmt, ...) \
+        SEGGER_RTT_printf(0, "%s[ERROR] " fmt "%s\n", \
+                         RTT_CTRL_TEXT_BRIGHT_RED, \
+                         ##__VA_ARGS__, \
+                         RTT_CTRL_RESET)
 #else
-    #define log_error(fmt, ...) do {} while(0)
+    #define log_err(fmt, ...) do {} while(0)
+#endif
+
+//
+// Normal log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in default text when enabled
+//   - Expands to empty statement when LOG_ENABLE_PRINT == 0
+//
+#if LOG_ENABLE_PRINT
+    #define log_print(fmt, ...) \
+        SEGGER_RTT_printf(0, fmt "\n", ##__VA_ARGS__)
+#else 
+    #define log_print(fmt, ...) do {} while(0)
 #endif
 
 #endif
