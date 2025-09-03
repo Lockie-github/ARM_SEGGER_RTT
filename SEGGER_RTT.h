@@ -143,7 +143,7 @@ typedef struct {
 *
 **********************************************************************
 */
-// extern SEGGER_RTT_CB _SEGGER_RTT;
+extern SEGGER_RTT_CB _SEGGER_RTT;
 
 /*********************************************************************
 *
@@ -271,7 +271,7 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 //   ...  : Variable arguments matching the format specifiers
 // Note: Adds newline automatically and outputs via SEGGER RTT channel 0
 //
-#define log_base(level, fmt, ...) SEGGER_RTT_printf(0, "[" level "] " fmt "\n", ##__VA_ARGS__)
+// #define log_base(level, fmt, ...) SEGGER_RTT_printf(0, "[" level "] " fmt "\n", ##__VA_ARGS__)
 
 //
 // Info-level log macro
