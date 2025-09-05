@@ -361,15 +361,13 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #if LOG_ENABLE_INFO
     #define log_info(fmt, ...) \
         do { \
-            if (SEGGER_RTT_HasKey()) { \
-                volatile int timeout = 1000; \
-                while (timeout-- > 0) { \
-                    int result = SEGGER_RTT_printf(0, "%s[INFO] " fmt "%s\n", \
-                                                  RTT_CTRL_TEXT_BRIGHT_GREEN, \
-                                                  ##__VA_ARGS__, \
-                                                  RTT_CTRL_RESET); \
-                    if (result >= 0) break; \
-                } \
+            volatile int timeout = 1000; \
+            while (timeout-- > 0) { \
+                int result = SEGGER_RTT_printf(0, "%s[INFO] " fmt "%s\n", \
+                                              RTT_CTRL_TEXT_BRIGHT_GREEN, \
+                                              ##__VA_ARGS__, \
+                                              RTT_CTRL_RESET); \
+                if (result >= 0) break; \
             } \
         } while(0)
 #else
@@ -388,15 +386,13 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #if LOG_ENABLE_DEBUG
     #define log_debug(fmt, ...) \
         do { \
-            if (SEGGER_RTT_HasKey()) { \
-                volatile int timeout = 1000; \
-                while (timeout-- > 0) { \
-                    int result = SEGGER_RTT_printf(0, "%s[DEBUG] " fmt "%s\n", \
-                                                  RTT_CTRL_TEXT_BRIGHT_BLUE, \
-                                                  ##__VA_ARGS__, \
-                                                  RTT_CTRL_RESET); \
-                    if (result >= 0) break; \
-                } \
+            volatile int timeout = 1000; \
+            while (timeout-- > 0) { \
+                int result = SEGGER_RTT_printf(0, "%s[DEBUG] " fmt "%s\n", \
+                                              RTT_CTRL_TEXT_BRIGHT_BLUE, \
+                                              ##__VA_ARGS__, \
+                                              RTT_CTRL_RESET); \
+                if (result >= 0) break; \
             } \
         } while(0)
 #else
@@ -415,15 +411,13 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #if LOG_ENABLE_ERROR
     #define log_err(fmt, ...) \
         do { \
-            if (SEGGER_RTT_HasKey()) { \
-                volatile int timeout = 1000; \
-                while (timeout-- > 0) { \
-                    int result = SEGGER_RTT_printf(0, "%s[ERROR] " fmt "%s\n", \
-                                                  RTT_CTRL_TEXT_BRIGHT_RED, \
-                                                  ##__VA_ARGS__, \
-                                                  RTT_CTRL_RESET); \
-                    if (result >= 0) break; \
-                } \
+            volatile int timeout = 1000; \
+            while (timeout-- > 0) { \
+                int result = SEGGER_RTT_printf(0, "%s[ERROR] " fmt "%s\n", \
+                                              RTT_CTRL_TEXT_BRIGHT_RED, \
+                                              ##__VA_ARGS__, \
+                                              RTT_CTRL_RESET); \
+                if (result >= 0) break; \
             } \
         } while(0)
 #else
@@ -442,15 +436,13 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #if LOG_ENABLE_WARN
     #define log_warn(fmt, ...) \
         do { \
-            if (SEGGER_RTT_HasKey()) { \
-                volatile int timeout = 100000; \
-                while (timeout-- > 0) { \
-                    int result = SEGGER_RTT_printf(0, "%s[WARN] " fmt "%s\n", \
-                                                  RTT_CTRL_TEXT_BRIGHT_YELLOW, \
-                                                  ##__VA_ARGS__, \
-                                                  RTT_CTRL_RESET); \
-                    if (result >= 0) break; \
-                } \
+            volatile int timeout = 1000; \
+            while (timeout-- > 0) { \
+                int result = SEGGER_RTT_printf(0, "%s[WARN] " fmt "%s\n", \
+                                              RTT_CTRL_TEXT_BRIGHT_YELLOW, \
+                                              ##__VA_ARGS__, \
+                                              RTT_CTRL_RESET); \
+                if (result >= 0) break; \
             } \
         } while(0)
 #else
@@ -468,13 +460,11 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 #if LOG_ENABLE_PRINT
     #define log_print(fmt, ...) \
         do { \
-            if (SEGGER_RTT_HasKey()) { \
-                volatile int timeout = 1000; \
-                while (timeout-- > 0) { \
-                    int result = SEGGER_RTT_printf(0, fmt "\n", \
-                                                  ##__VA_ARGS__); \
-                    if (result >= 0) break; \
-                } \
+            volatile int timeout = 1000; \
+            while (timeout-- > 0) { \
+                int result = SEGGER_RTT_printf(0, fmt "\n", \
+                                              ##__VA_ARGS__); \
+                if (result >= 0) break; \
             } \
         } while(0)
 #else
