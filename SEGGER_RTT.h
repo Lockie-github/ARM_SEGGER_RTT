@@ -82,8 +82,8 @@ Revision: $Rev: 4351 $
 #define LOG_ENABLE_INFO     1  // Enable info-level logs. Set to 1 to enable, 0 to disable.
 #define LOG_ENABLE_ERROR    1  // Enable error-level logs. Set to 1 to enable, 0 to disable.
 #define LOG_ENABLE_DEBUG    1  // Enable debug-level logs. Set to 1 to enable, 0 to disable.
-#define LOG_ENABLE_PRINT    1  // Enable debug-level logs. Set to 1 to enable, 0 to disable.
-
+#define LOG_ENABLE_WARN     1 // Enable warning-level logs. Set to 1 to enable, 0 to disable.
+#define LOG_ENABLE_PRINT    1  // Enable print-level logs. Set to 1 to enable, 0 to disable.
 /*********************************************************************
 *
 *       Defines, fixed
@@ -264,6 +264,7 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
 **********************************************************************
 */
 
+#if 0
 //
 // Base macro for logging
 //   level: Log level string (e.g. "INFO", "DEBUG")
@@ -345,6 +346,140 @@ int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...);
     #define log_print(fmt, ...) do {} while(0)
 #endif
 
+
+#endif
+
+//
+// Info-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright green text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_INFO == 0
+//
+#if LOG_ENABLE_INFO
+    #define log_info(fmt, ...) \
+        do { \
+            if (SEGGER_RTT_HasKey()) { \
+                volatile int timeout = 1000; \
+                while (timeout-- > 0) { \
+                    int result = SEGGER_RTT_printf(0, "%s[INFO] " fmt "%s\n", \
+                                                  RTT_CTRL_TEXT_BRIGHT_GREEN, \
+                                                  ##__VA_ARGS__, \
+                                                  RTT_CTRL_RESET); \
+                    if (result >= 0) break; \
+                } \
+            } \
+        } while(0)
+#else
+    #define log_info(fmt, ...) do {} while(0)
+#endif
+
+//
+// Debug-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright blue text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_DEBUG == 0
+//
+#if LOG_ENABLE_DEBUG
+    #define log_debug(fmt, ...) \
+        do { \
+            if (SEGGER_RTT_HasKey()) { \
+                volatile int timeout = 1000; \
+                while (timeout-- > 0) { \
+                    int result = SEGGER_RTT_printf(0, "%s[DEBUG] " fmt "%s\n", \
+                                                  RTT_CTRL_TEXT_BRIGHT_BLUE, \
+                                                  ##__VA_ARGS__, \
+                                                  RTT_CTRL_RESET); \
+                    if (result >= 0) break; \
+                } \
+            } \
+        } while(0)
+#else
+    #define log_debug(fmt, ...) do {} while(0)
+#endif
+
+//
+// Error-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright red text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_ERROR == 0
+//
+#if LOG_ENABLE_ERROR
+    #define log_err(fmt, ...) \
+        do { \
+            if (SEGGER_RTT_HasKey()) { \
+                volatile int timeout = 1000; \
+                while (timeout-- > 0) { \
+                    int result = SEGGER_RTT_printf(0, "%s[ERROR] " fmt "%s\n", \
+                                                  RTT_CTRL_TEXT_BRIGHT_RED, \
+                                                  ##__VA_ARGS__, \
+                                                  RTT_CTRL_RESET); \
+                    if (result >= 0) break; \
+                } \
+            } \
+        } while(0)
+#else
+    #define log_err(fmt, ...) do {} while(0)
+#endif
+
+//
+// Warning-level log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in bright yellow text when enabled
+//   - Adds color reset sequence after message
+//   - Expands to empty statement when LOG_ENABLE_WARN == 0
+//
+#if LOG_ENABLE_WARN
+    #define log_warn(fmt, ...) \
+        do { \
+            if (SEGGER_RTT_HasKey()) { \
+                volatile int timeout = 100000; \
+                while (timeout-- > 0) { \
+                    int result = SEGGER_RTT_printf(0, "%s[WARN] " fmt "%s\n", \
+                                                  RTT_CTRL_TEXT_BRIGHT_YELLOW, \
+                                                  ##__VA_ARGS__, \
+                                                  RTT_CTRL_RESET); \
+                    if (result >= 0) break; \
+                } \
+            } \
+        } while(0)
+#else
+    #define log_warn(fmt, ...) do {} while(0)
+#endif
+
+//
+// Normal print log macro
+//   fmt  : Format string for printf-style formatting
+//   ...  : Variable arguments matching the format specifiers
+// Note: 
+//   - Outputs in default text when enabled
+//   - Expands to empty statement when LOG_ENABLE_PRINT == 0
+//
+#if LOG_ENABLE_PRINT
+    #define log_print(fmt, ...) \
+        do { \
+            if (SEGGER_RTT_HasKey()) { \
+                volatile int timeout = 1000; \
+                while (timeout-- > 0) { \
+                    int result = SEGGER_RTT_printf(0, fmt "\n", \
+                                                  ##__VA_ARGS__); \
+                    if (result >= 0) break; \
+                } \
+            } \
+        } while(0)
+#else
+    #define log_print(fmt, ...) do {} while(0)
+#endif
 #endif
 
 /*************************** End of file ****************************/
