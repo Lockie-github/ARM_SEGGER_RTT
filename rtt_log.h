@@ -12,6 +12,9 @@
 
 #define LOG_ENABLE_LITE     0  // Enable lite-level logs
 
+#if LOG_ENABLE_FLOAT
+    #include "rtt_core.h"
+#endif
 
 //
 // Info-level log macro
@@ -119,9 +122,6 @@
 // Float-value logging macros
 //
 #if LOG_ENABLE_FLOAT
-
-#include "rtt_core.h"
-
     /**
      * 打印浮点数值
      */
