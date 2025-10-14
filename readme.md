@@ -7,7 +7,7 @@
 # MCU_ID = $(shell echo $(LDSCRIPT) | cut -c1-11)
 #由于STM32CubeMX 版本更新后采用族类ld文件,无法自动获取型号,改为采用自定义的方式
 
-MCU_ID = STM32L031G6
+MCU_ID = 
 
 ifeq ($(MCU_ID),)
     $(error 请配置 MCU 值)
