@@ -35,6 +35,15 @@ fr: all
 	@echo "flash & run"
 	$(MAKE) flash
 	$(MAKE) run
+rttts:
+	@make rtt | ts '%H:%M:%S'
+LOGDIR := logs
+RTT_LOGFILE := $(LOGDIR)/$(shell date +%Y%m%d_%H%M%S).log
+
+rttlog:
+	@mkdir -p "$(LOGDIR)"
+	@make rtt | ts '%Y-%m-%d %H:%M:%S' | tee "$(RTT_LOGFILE)"
+.PHONY: rttlog
 
 # ============ Flash/RAM Analysis Targets ============
 # .PHONY: analyze analyze-printf analyze-symbols analyze-flash
