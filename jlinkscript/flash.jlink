@@ -1,7 +1,7 @@
-speed 2400
+speed 24000
 si swd
 connect
-loadfile build/{{TARGET}}.hex
+loadfile {{BUILD_DIR}}/{{TARGET}}.hex
 r
 g
 qc
