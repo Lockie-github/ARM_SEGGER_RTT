@@ -12,6 +12,8 @@
   - [\[2.0.0\] - 2026-03-27](#200---2026-03-27)
     - [Added](#added)
     - [Changed](#changed)
+  - [\[2.0.1\] - 2026-04-07](#201---2026-04-07)
+    - [Changed](#changed-1)
 
 ---
 
@@ -27,13 +29,13 @@
 # 移植
 ## Make
 1. 拉取本仓库到STM32CubeMX生成的Makefile工程路径下
-2. 在生成的工程的Makefile文件中加入以下代码:
+2. 在生成的工程的Makefile文件中的指定位置分别加入以下代码:
 ```Makefile
 
 include ARM_SEGGER_RTT/segger_rtt.mk
-ALLINC := $(patsubst %,-I%,$(ALLINC))
-C_SOURCES += $(ALLCSRC)
-C_INCLUDES += $(ALLINC)
+EXTRA_INCLUDES := $(patsubst %,-I%,$(EXTRA_INCLUDES))
+C_SOURCES += $(EXTRA_C_SOURCES)
+C_INCLUDES += $(EXTRA_INCLUDES)
 # compile gcc flags
 
 # *** EOF ***
@@ -285,7 +287,8 @@ clean:
 # 修订记录:
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
-|1.0.0|2026/03/37|更改了文档的结构||
+|1.0.0|2026/03/27|更改了文档的结构||
+|1.0.1|2026/04/07|修改了移植描述,[位于移植/Make/2.](#make)||
 
 ---
 
@@ -322,3 +325,7 @@ clean:
 
 ### Changed
   - 修改了下载脚本,兼容Cmake与Make,注:脚本已不再兼容V1.0.0
+
+## [2.0.1] - 2026-04-07 
+### Changed
+  - 修改了segger_rtt.mk的变量命名,语义表达更清晰,风格与ST更相近
