@@ -6,7 +6,12 @@ ifeq ($(IOC_FILE),)
   $(error 未找到 .ioc 文件)
 endif
 
-MCU_ID := $(shell awk -F'=' '/^Mcu\.CPN=/ {print substr($$2, 1, length($$2)-2); exit}' "$(IOC_FILE)")
+MCU_ID := $(shell awk -F'=' '/^ProjectManager\.DeviceId=/ { \
+  v=$$2; \
+  sub(/[A-Z]x$$/, "", v); \
+  print v; \
+  exit \
+}' "$(IOC_FILE)")
 
 ifeq ($(MCU_ID),)
   $(error 提取 MCU 型号失败)
