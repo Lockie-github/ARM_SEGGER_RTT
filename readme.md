@@ -14,6 +14,8 @@
     - [Changed](#changed)
   - [\[2.0.1\] - 2026-04-07](#201---2026-04-07)
     - [Changed](#changed-1)
+  - [\[2.0.2\] - 2026-07-01](#202---2026-07-01)
+    - [Fixed](#fixed)
 
 ---
 
@@ -46,7 +48,12 @@ ifeq ($(IOC_FILE),)
   $(error 未找到 .ioc 文件)
 endif
 
-MCU_ID := $(shell awk -F'=' '/^Mcu\.CPN=/ {print substr($$2, 1, length($$2)-2); exit}' "$(IOC_FILE)")
+MCU_ID := $(shell awk -F'=' '/^ProjectManager\.DeviceId=/ { \
+  v=$$2; \
+  sub(/[A-Z]x$$/, "", v); \
+  print v; \
+  exit \
+}' "$(IOC_FILE)")
 
 ifeq ($(MCU_ID),)
   $(error 提取 MCU 型号失败)
@@ -170,7 +177,12 @@ ifeq ($(IOC_FILE),)
   $(error 未找到 .ioc 文件)
 endif
 
-MCU_ID := $(shell awk -F'=' '/^Mcu\.CPN=/ {print substr($$2, 1, length($$2)-2); exit}' "$(IOC_FILE)")
+MCU_ID := $(shell awk -F'=' '/^ProjectManager\.DeviceId=/ { \
+  v=$$2; \
+  sub(/[A-Z]x$$/, "", v); \
+  print v; \
+  exit \
+}' "$(IOC_FILE)")
 
 ifeq ($(MCU_ID),)
   $(error 提取 MCU 型号失败)
@@ -329,3 +341,7 @@ clean:
 ## [2.0.1] - 2026-04-07 
 ### Changed
   - 修改了segger_rtt.mk的变量命名,语义表达更清晰,风格与ST更相近
+  
+## [2.0.2] - 2026-07-01 
+### Fixed
+  - 修复当芯片型号带特殊版本后缀时自动获取MCU_ID错误的bug
