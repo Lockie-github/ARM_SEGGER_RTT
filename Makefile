@@ -120,5 +120,11 @@ release:r
 	     ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > $(BUILD_DIR)/Release/flash.jlink
 	JLinkExe -Device $(MCU_ID) -CommandFile $(BUILD_DIR)/Release/flash.jlink
 
+dr:debug
+	make run
+
+rr:release
+	make run
+
 clean:
 	-rm -fR build

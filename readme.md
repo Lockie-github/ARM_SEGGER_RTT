@@ -4,18 +4,26 @@
 - [移植](#移植)
   - [Make](#make)
   - [CMake](#cmake)
+    - [配置、编译和烧录](#配置编译和烧录)
+      - [Debug](#debug)
+      - [Release](#release)
+      - [其他常用命令](#其他常用命令)
+    - [常见问题](#常见问题)
 - [修订记录:](#修订记录)
 - [更新记录](#更新记录)
-  - [\[1.0.0\]](#100)
-  - [\[1.0.1\]](#101)
-  - [\[1.0.2\]](#102)
-  - [\[2.0.0\] - 2026-03-27](#200---2026-03-27)
+  - [\[2.1.0\] - 2026-07-30](#210---2026-07-30)
     - [Added](#added)
     - [Changed](#changed)
-  - [\[2.0.1\] - 2026-04-07](#201---2026-04-07)
-    - [Changed](#changed-1)
   - [\[2.0.2\] - 2026-07-01](#202---2026-07-01)
     - [Fixed](#fixed)
+  - [\[2.0.1\] - 2026-04-07](#201---2026-04-07)
+    - [Changed](#changed-1)
+  - [\[2.0.0\] - 2026-03-27](#200---2026-03-27)
+    - [Added](#added-1)
+    - [Changed](#changed-2)
+  - [\[1.0.2\]](#102)
+  - [\[1.0.1\]](#101)
+  - [\[1.0.0\]](#100)
 
 ---
 
@@ -291,33 +299,211 @@ release:r
 	     ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > $(BUILD_DIR)/Release/flash.jlink
 	JLinkExe -Device $(MCU_ID) -CommandFile $(BUILD_DIR)/Release/flash.jlink
 
+dr:debug
+	make run
+
+rr:release
+	make run
+
 clean:
 	-rm -fR build
 
 ```
 
+### 配置、编译和烧录
+
+首次使用新工程时，STM32Cube 插件可能尚未将其识别为 STM32Cube 工程。请先完成以下操作：
+
+1. 使用 VS Code 打开 STM32CubeMX 生成的工程根目录。
+2. 如果 VS Code 弹出“是否加载为 STM32Cube 工程”的提示，请确认加载。
+3. 如果没有出现提示，按 `Cmd+Shift+P`（Windows/Linux 为 `Ctrl+Shift+P`）打开命令面板，执行 `STM32Cube: Set up STM32Cube projects`，然后选择当前工程并完成设置。
+4. 设置完成后关闭已有终端，并新建一个 VS Code 集成终端，使插件提供的工具路径生效。
+5. 在新终端中确认 `cube-cmake` 可用：
+
+```shell
+command -v cube-cmake
+cube-cmake --version
+```
+
+以下命令均在工程根目录的 VS Code 集成终端中执行。
+
+#### Debug
+
+首次构建或 CMake 配置发生变化后，先生成 Debug 构建目录：
+
+```shell
+make preset_debug
+```
+
+然后编译 Debug 固件：
+
+```shell
+make d
+```
+
+也可以连续完成配置和编译：
+
+```shell
+make preset_debug && make d
+```
+
+编译并通过 J-Link 烧录 Debug 固件：
+
+```shell
+make debug
+```
+
+`make debug` 会先执行 Debug 编译，再生成 J-Link 下载脚本并烧录固件。它要求已经执行过 `make preset_debug`，并且系统中可以找到 `JLinkExe`。
+
+#### Release
+
+生成 Release 构建目录并编译：
+
+```shell
+make preset_release
+make r
+```
+
+也可以连续执行：
+
+```shell
+make preset_release && make r
+```
+
+编译并通过 J-Link 烧录 Release 固件：
+
+```shell
+make release
+```
+
+#### 其他常用命令
+
+```shell
+make info       # 显示从 .ioc 和 CMakeLists.txt 中解析出的 MCU 与目标名称
+make clean      # 删除整个 build 目录
+make erase      # 使用 J-Link 擦除芯片
+make run        # 启动 J-Link 并连接 RTT
+make rtt        # 连接 RTT Telnet 端口
+make rttlog     # 将带时间戳的 RTT 输出保存到 logs 目录
+```
+
+`preset_debug` 和 `preset_release` 会先删除对应的构建目录再重新生成，因此修改工具链文件、生成器或重要 CMake 配置后应重新执行相应的 preset 命令；仅修改 C/C++ 源文件时，直接执行 `make d` 或 `make r` 即可。
+
+### 常见问题
+
+1.  `cube-cmake: No such file or directory`
+
+如果执行 Makefile 时出现 `make: cube-cmake: No such file or directory`，通常表示当前工程尚未完成 STM32Cube 设置，或者终端是在插件加载前创建的。执行 `STM32Cube: Set up STM32Cube projects` 后重新新建集成终端即可。
+
+可以使用以下命令确认当前终端是否能够找到插件提供的 CMake：
+
+```shell
+command -v cube-cmake
+cube-cmake --version
+```
+
+2. 执行 `make d` 或 `make r` 时提示构建目录不存在
+
+`make d` 和 `make r` 只负责编译已经配置好的构建目录。新工程、执行过 `make clean`，或者相应构建目录被删除后，需要先生成构建目录：
+
+```shell
+make preset_debug    # 对应 make d
+make preset_release  # 对应 make r
+```
+
+3. CMake 提示找不到 Ninja 或 ARM GCC
+
+如果出现 `CMAKE_MAKE_PROGRAM is not set`、`Ninja not found` 或找不到 `arm-none-eabi-gcc`，请确认 STM32Cube 工程设置中已经安装并选择 Ninja 与 GNU Tools for STM32。完成设置后重新新建 VS Code 集成终端，再检查工具是否可用：
+
+```shell
+ninja --version
+arm-none-eabi-gcc --version
+```
+
+如果更换过工具链版本，请重新执行 `make preset_debug` 或 `make preset_release`，不要继续使用旧的 CMake 缓存。
+
+4. Makefile 提示未找到 `.ioc` 文件或提取 MCU 型号失败
+
+Makefile 必须在包含 `.ioc` 文件的工程根目录执行，并通过 `.ioc` 文件中的 `ProjectManager.DeviceId` 自动获取 J-Link 设备名称。请先确认当前目录和解析结果：
+
+```shell
+pwd
+ls *.ioc
+make info
+```
+
+部分 STM32CubeMX 版本或芯片生成的 `.ioc` 文件可能没有可用的 `ProjectManager.DeviceId`。此时需要在工程根目录的 Makefile 中手动设置 `MCU_ID`，其值应使用 J-Link 支持的设备名称。
+
+5. `make info` 显示 `TARGET: unknown`
+
+Makefile 会从工程根目录的 `CMakeLists.txt` 中解析以下配置：
+
+```cmake
+set(CMAKE_PROJECT_NAME your_project_name)
+```
+
+如果工程使用了不同写法，自动解析可能失败。请保持上述格式，或者在 Makefile 中手动设置 `TARGET`。`TARGET` 必须与最终生成的 `.elf`、`.hex` 文件名一致。
+
+6. `JLinkExe: command not found`
+
+`make debug`、`make release`、`make erase` 和 `make run` 都依赖 SEGGER J-Link。请先安装 J-Link Software and Documentation Pack，并确保 `JLinkExe` 已加入 `PATH`：
+
+```shell
+command -v JLinkExe
+JLinkExe -version
+```
+
+7. 烧录时提示找不到 HEX 文件
+
+请确认编译已经成功，并且工程根目录的 `CMakeLists.txt` 已按本章节说明添加生成 `.hex` 文件的 `add_custom_command`。然后执行：
+
+```shell
+make info
+find build -name '*.hex'
+```
+
+如果 `make info` 显示的 `TARGET` 与实际 HEX 文件名不同，请修正 Makefile 中的 `TARGET` 后重新烧录。
+
+8. RTT 提示连接被拒绝或一直无法连接
+
+`make rtt` 只连接本机的 RTT Telnet 端口，不会自行启动 J-Link。请先在一个终端执行 `make run` 并保持其运行，再在另一个终端执行 `make rtt`。同时确认开发板已连接、`MCU_ID` 正确，并且端口 `9999` 没有被其他程序占用。
+
+8. `ts: command not found`
+
+`make rttts` 和 `make rttlog` 使用 `ts` 为日志添加时间戳。没有安装 `ts` 时仍可使用不带时间戳的 `make rtt`；如需时间戳功能，请安装提供 `ts` 命令的 `moreutils` 工具包。
+
 # 修订记录:
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
-|1.0.0|2026/03/27|更改了文档的结构||
+|1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
 |1.0.1|2026/04/07|修改了移植描述,[位于移植/Make/2.](#make)||
+|1.0.0|2026/03/27|更改了文档的结构||
 
 ---
 
 # 更新记录
-## [1.0.0]
-  1. 源自于SEGGER_RTT_V864a
-  2. 添加了分级日志功能,全部开启Flash占用约7.7K
-     1. 添加了浮点打印支持
-     2. 拥有超时机制
-     3. 拥有颜色等级区分
-  3. 添加了lite等级,Flash占用约3.9K
-     1. 仅保留基础打印功能
-     2. 该功能开启后除浮点外的分级日志将全部关闭
+## [2.1.0] - 2026-07-30
+### Added
+  - 新增`dr`和`rr`目标,支持Debug/Release固件编译、烧录后直接运行
+  - 新增STM32Cube CMake工程配置、编译、烧录说明和常见问题章节
 
-## [1.0.1]
-  1. 添加有FPU的MCU浮点型处理逻辑,提高性能
-  2. 增加浮点型NAN等特殊值的处理
+### Changed
+  - 修订记录和更新记录改为倒序排列,优先显示最新版本
+
+## [2.0.2] - 2026-07-01
+### Fixed
+  - 修复当芯片型号带特殊版本后缀时自动获取MCU_ID错误的bug
+
+## [2.0.1] - 2026-04-07
+### Changed
+  - 修改了segger_rtt.mk的变量命名,语义表达更清晰,风格与ST更相近
+
+## [2.0.0] - 2026-03-27
+### Added
+  - 新增对Cmake的支持
+
+### Changed
+  - 修改了下载脚本,兼容Cmake与Make,注:脚本已不再兼容V1.0.0
 
 ## [1.0.2]
   1. 添加了带时间戳的日志,需要安装ts工具
@@ -331,17 +517,16 @@ clean:
     make rtt | gawk '{ print strftime("%Y-%m-%d %H:%M:%S"), $0 }' | tee  "$(RTT_LOGFILE)"
     ```
 
-## [2.0.0] - 2026-03-27 
-### Added
-  - 新增对Cmake的支持 
+## [1.0.1]
+  1. 添加有FPU的MCU浮点型处理逻辑,提高性能
+  2. 增加浮点型NAN等特殊值的处理
 
-### Changed
-  - 修改了下载脚本,兼容Cmake与Make,注:脚本已不再兼容V1.0.0
-
-## [2.0.1] - 2026-04-07 
-### Changed
-  - 修改了segger_rtt.mk的变量命名,语义表达更清晰,风格与ST更相近
-  
-## [2.0.2] - 2026-07-01 
-### Fixed
-  - 修复当芯片型号带特殊版本后缀时自动获取MCU_ID错误的bug
+## [1.0.0]
+  1. 源自于SEGGER_RTT_V864a
+  2. 添加了分级日志功能,全部开启Flash占用约7.7K
+     1. 添加了浮点打印支持
+     2. 拥有超时机制
+     3. 拥有颜色等级区分
+  3. 添加了lite等级,Flash占用约3.9K
+     1. 仅保留基础打印功能
+     2. 该功能开启后除浮点外的分级日志将全部关闭
