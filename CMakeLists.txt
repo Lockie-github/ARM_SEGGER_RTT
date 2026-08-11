@@ -1,6 +1,7 @@
 add_library(arm_segger_rtt STATIC
     RTT/SEGGER_RTT.c
     RTT/rtt_printf.c
+    RTT/rtt_core.c
     RTT/SEGGER_RTT_ASM_ARMv7M.S
 )
 
