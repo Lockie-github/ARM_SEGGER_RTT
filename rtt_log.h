@@ -125,14 +125,24 @@
     /**
      * 打印浮点数值
      */
-    #define log_float(value) \
-        __LOG_FLOAT_PROCESS((value), __LOG_FLOAT_CORE(__sign_str, __int_part_abs, __dec_part))
+    #if HAS_FPU
+        #define log_float(value) \
+            __LOG_FLOAT_PROCESS((value), __LOG_FLOAT_CORE(__sign_str, __int_part_abs, __dec_part))
+    #else
+        #define log_float(value) \
+            __LOG_FLOAT_PROCESS_FIXED((value), NULL)
+    #endif
 
     /**
      * 打印带描述的浮点数值
      */
-    #define log_float_desc(desc, value) \
-        __LOG_FLOAT_PROCESS((value), __LOG_FLOAT_DESC_CORE((desc), __sign_str, __int_part_abs, __dec_part))
+    #if HAS_FPU
+        #define log_float_desc(desc, value) \
+            __LOG_FLOAT_PROCESS((value), __LOG_FLOAT_DESC_CORE((desc), __sign_str, __int_part_abs, __dec_part))
+    #else
+        #define log_float_desc(desc, value) \
+            __LOG_FLOAT_PROCESS_FIXED((value), (desc))
+    #endif
 
 #else
 
