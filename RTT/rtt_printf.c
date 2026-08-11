@@ -41,6 +41,7 @@
 
 #include "SEGGER_RTT.h"
 #include "SEGGER_RTT_Conf.h"
+#include "rtt_printf.h"
 
 #include <limits.h>
 #include <stdarg.h>
@@ -255,13 +256,19 @@ static void _PrintString(RTT_PRINTF_DESC * pDesc, const char * s, unsigned Preci
   _StoreSpan(pDesc, s, Length);
 }
 
-int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pParamList) {
+int RTT_vprintfFramed(unsigned BufferIndex,
+                      const char * pPrefix,
+                      const char * sFormat,
+                      va_list * pParamList,
+                      const char * pSuffix) {
   RTT_PRINTF_DESC Desc;
 
   Desc.BufferIndex = BufferIndex;
   Desc.Count = 0u;
   Desc.Used = 0u;
   Desc.Error = 0;
+
+  _PrintString(&Desc, pPrefix, UINT_MAX);
 
   while ((*sFormat != '\0') && (Desc.Error == 0)) {
     const char * pLiteral;
@@ -388,6 +395,9 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
   }
 
   if (Desc.Error == 0) {
+    _PrintString(&Desc, pSuffix, UINT_MAX);
+  }
+  if (Desc.Error == 0) {
     _Flush(&Desc);
   }
   if (Desc.Error == 0) {
@@ -396,6 +406,10 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
     }
   }
   return -1;
+}
+
+int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pParamList) {
+  return RTT_vprintfFramed(BufferIndex, "", sFormat, pParamList, "");
 }
 
 int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...) {

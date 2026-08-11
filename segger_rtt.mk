@@ -1,7 +1,8 @@
 # List of all the board related files.
 RTT_C_SOURCES = ARM_SEGGER_RTT/RTT/SEGGER_RTT.c \
-		 ARM_SEGGER_RTT/RTT/rtt_printf.c \
-		 ARM_SEGGER_RTT/RTT/rtt_core.c
+			 ARM_SEGGER_RTT/RTT/rtt_printf.c \
+			 ARM_SEGGER_RTT/RTT/rtt_log.c \
+			 ARM_SEGGER_RTT/RTT/rtt_core.c
 
 # Required include directories
 RTT_INCLUDES = ARM_SEGGER_RTT/RTT \

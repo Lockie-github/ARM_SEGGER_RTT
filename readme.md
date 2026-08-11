@@ -9,6 +9,7 @@
       - [Release](#release)
       - [其他常用命令](#其他常用命令)
     - [常见问题](#常见问题)
+- [日志配置](#日志配置)
 - [修订记录:](#修订记录)
 - [更新记录](#更新记录)
   - [\[2.1.0\] - 2026-07-30](#210---2026-07-30)
@@ -471,6 +472,29 @@ find build -name '*.hex'
 8. `ts: command not found`
 
 `make rttts` 和 `make rttlog` 使用 `ts` 为日志添加时间戳。没有安装 `ts` 时仍可使用不带时间戳的 `make rtt`；如需时间戳功能，请安装提供 `ts` 命令的 `moreutils` 工具包。
+
+# 日志配置
+
+`rtt_log.h` 默认使用 RTT Up Buffer 0 并启用 ANSI 颜色。日志前缀和颜色
+由 `RTT/rtt_log.c` 编译，因此配置必须应用到 `arm_segger_rtt` 库目标本身。
+
+```cmake
+target_compile_definitions(arm_segger_rtt PUBLIC
+    RTT_LOG_BUFFER_INDEX=1
+    RTT_LOG_USE_COLOR=0
+)
+```
+
+Make 工程应把相同定义加入编译 `RTT/rtt_log.c` 时使用的全局 C flags：
+
+```make
+CFLAGS += -DRTT_LOG_BUFFER_INDEX=1
+CFLAGS += -DRTT_LOG_USE_COLOR=0
+```
+
+`RTT_LOG_BUFFER_INDEX` 默认为 `0u`，`RTT_LOG_USE_COLOR` 默认为 `1`。
+各 `LOG_ENABLE_*` 开关也可以通过编译定义覆盖；`LOG_ENABLE_LITE=1` 时，
+普通日志只输出正文和换行，不输出颜色及等级前缀。
 
 # 修订记录:
 | 文档版本 | 修订时间 | 修改内容 | 备注 |

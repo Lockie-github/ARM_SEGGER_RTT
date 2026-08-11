@@ -1,168 +1,119 @@
-#ifndef __RTT_H__
-#define __RTT_H__
+#ifndef ARM_SEGGER_RTT_LOG_H
+#define ARM_SEGGER_RTT_LOG_H
 
 #include "SEGGER_RTT.h"
 
-#define LOG_ENABLE_INFO     1  // Enable info-level logs
-#define LOG_ENABLE_ERROR    1  // Enable error-level logs
-#define LOG_ENABLE_DEBUG    1  // Enable debug-level logs
-#define LOG_ENABLE_WARN     1  // Enable warning-level logs
-#define LOG_ENABLE_PRINT    1  // Enable print-level logs
-#define LOG_ENABLE_FLOAT    1  // Enable float-value logs
+#ifndef LOG_ENABLE_INFO
+  #define LOG_ENABLE_INFO  1
+#endif
+#ifndef LOG_ENABLE_ERROR
+  #define LOG_ENABLE_ERROR 1
+#endif
+#ifndef LOG_ENABLE_DEBUG
+  #define LOG_ENABLE_DEBUG 1
+#endif
+#ifndef LOG_ENABLE_WARN
+  #define LOG_ENABLE_WARN  1
+#endif
+#ifndef LOG_ENABLE_PRINT
+  #define LOG_ENABLE_PRINT 1
+#endif
+#ifndef LOG_ENABLE_FLOAT
+  #define LOG_ENABLE_FLOAT 1
+#endif
+#ifndef LOG_ENABLE_LITE
+  #define LOG_ENABLE_LITE  0
+#endif
 
-#define LOG_ENABLE_LITE     0  // Enable lite-level logs
+#ifndef RTT_LOG_BUFFER_INDEX
+  #define RTT_LOG_BUFFER_INDEX 0u
+#endif
+#ifndef RTT_LOG_USE_COLOR
+  #define RTT_LOG_USE_COLOR 1
+#endif
 
 #if LOG_ENABLE_FLOAT
-    #include "rtt_core.h"
+  #include "rtt_core.h"
 #endif
 
-//
-// Info-level log macro
-//
-#if LOG_ENABLE_INFO
-    #define log_info(fmt, ...) \
-        do { \
-            volatile int __timeout = 100; \
-            while (__timeout-- > 0) { \
-                int __result = SEGGER_RTT_printf(0, "%s[INFO] " fmt "%s\n", \
-                                              RTT_CTRL_TEXT_BRIGHT_GREEN, \
-                                              ##__VA_ARGS__, \
-                                              RTT_CTRL_RESET); \
-                if (__result >= 0) break; \
-            } \
-        } while(0)
-#elif LOG_ENABLE_LITE
-    #undef  log_info   
+#if defined(__GNUC__) || defined(__clang__)
+  #define RTT_LOG_FORMAT_ATTRIBUTE(FormatIndex, FirstArgument) \
+    __attribute__((format(printf, FormatIndex, FirstArgument)))
 #else
-    #define log_info(fmt,...) do {} while(0)
+  #define RTT_LOG_FORMAT_ATTRIBUTE(FormatIndex, FirstArgument)
 #endif
 
-//
-// Debug-level log macro
-//
-#if LOG_ENABLE_DEBUG
-    #define log_debug(fmt, ...) \
-        do { \
-            volatile int __timeout = 100; \
-            while (__timeout-- > 0) { \
-                int __result = SEGGER_RTT_printf(0, "%s[DEBUG] " fmt "%s\n", \
-                                              RTT_CTRL_TEXT_BRIGHT_BLUE, \
-                                              ##__VA_ARGS__, \
-                                              RTT_CTRL_RESET); \
-                if (__result >= 0) break; \
-            } \
-        } while(0)
-#elif LOG_ENABLE_LITE
-    #undef  log_debug   
-#else
-    #define log_debug(fmt,...) do {} while(0)
+typedef enum {
+  RTT_LOG_LEVEL_INFO,
+  RTT_LOG_LEVEL_DEBUG,
+  RTT_LOG_LEVEL_WARN,
+  RTT_LOG_LEVEL_ERROR,
+  RTT_LOG_LEVEL_PRINT
+} RTT_LOG_LEVEL;
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-//
-// Error-level log macro
-//
-#if LOG_ENABLE_ERROR
-    #define log_err(fmt, ...) \
-        do { \
-            volatile int __timeout = 100; \
-            while (__timeout-- > 0) { \
-                int __result = SEGGER_RTT_printf(0, "%s[ERROR] " fmt "%s\n", \
-                                              RTT_CTRL_TEXT_BRIGHT_RED, \
-                                              ##__VA_ARGS__, \
-                                              RTT_CTRL_RESET); \
-                if (__result >= 0) break; \
-            } \
-        } while(0)
-#elif LOG_ENABLE_LITE
-    #undef  log_err 
-#else
-    #define log_err(fmt,...) do {} while(0)
+int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
+  RTT_LOG_FORMAT_ATTRIBUTE(2, 3);
+
+#undef RTT_LOG_FORMAT_ATTRIBUTE
+
+#ifdef __cplusplus
+}
 #endif
-
-//
-// Warning-level log macro
-//
-#if LOG_ENABLE_WARN
-    #define log_warn(fmt, ...) \
-        do { \
-            volatile int __timeout = 100; \
-            while (__timeout-- > 0) { \
-                int __result = SEGGER_RTT_printf(0, "%s[WARN] " fmt "%s\n", \
-                                              RTT_CTRL_TEXT_BRIGHT_YELLOW, \
-                                              ##__VA_ARGS__, \
-                                              RTT_CTRL_RESET); \
-                if (__result >= 0) break; \
-            } \
-        } while(0)
-#elif LOG_ENABLE_LITE
-    #undef  log_warn 
-#else
-    #define log_warn(fmt,...) do {} while(0)
-#endif
-
-//
-// Normal print log macro
-//
-#if LOG_ENABLE_PRINT
-    #define log_print(fmt, ...) \
-        do { \
-            volatile int __timeout = 100; \
-            while (__timeout-- > 0) { \
-                int __result = SEGGER_RTT_printf(0, fmt "\n", ##__VA_ARGS__); \
-                if (__result >= 0) break; \
-            } \
-        } while(0)
-#elif LOG_ENABLE_LITE
-    #undef  log_print 
-#else
-    #define log_print(fmt,...) do {} while(0)
-#endif
-
-//
-// Float-value logging macros
-//
-#if LOG_ENABLE_FLOAT
-    /**
-     * 打印浮点数值
-     */
-    #define log_float(value) \
-        RTT_LogFloat3((float)(value), NULL)
-
-    /**
-     * 打印带描述的浮点数值
-     */
-    #define log_float_desc(desc, value) \
-        RTT_LogFloat3((float)(value), (desc))
-
-#else
-
-    #define log_float(value) do {} while(0)
-    #define log_float_desc(desc, value) do {} while(0)
-
-#endif // LOG_ENABLE_FLOAT
-
 
 #if LOG_ENABLE_LITE
 
-    #if 0
-        #define log_base(...)   do {SEGGER_RTT_printf(0, __VA_ARGS__);} while(0)
-    #else
-        #define log_base(fmt, ...) \
-        do { \
-            SEGGER_RTT_printf(0, fmt "\n", ##__VA_ARGS__); \
-        } while(0)
-    
-    #endif
-    
-    #define log_err(fmt,...) log_base(fmt,##__VA_ARGS__)
-    #define log_warn(fmt,...) log_base(fmt,##__VA_ARGS__)
-    #define log_debug(fmt,...) log_base(fmt,##__VA_ARGS__)
-    #define log_info(fmt,...) log_base(fmt,##__VA_ARGS__)
-    #define log_print(fmt,...) log_base(fmt,##__VA_ARGS__)
+  #define log_info(...)  do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+  #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+  #define log_warn(...)  do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+  #define log_err(...)   do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+  #define log_print(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+
+#else
+
+  #if LOG_ENABLE_INFO
+    #define log_info(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_INFO, __VA_ARGS__); } while (0)
+  #else
+    #define log_info(...) do {} while (0)
+  #endif
+
+  #if LOG_ENABLE_DEBUG
+    #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_DEBUG, __VA_ARGS__); } while (0)
+  #else
+    #define log_debug(...) do {} while (0)
+  #endif
+
+  #if LOG_ENABLE_WARN
+    #define log_warn(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_WARN, __VA_ARGS__); } while (0)
+  #else
+    #define log_warn(...) do {} while (0)
+  #endif
+
+  #if LOG_ENABLE_ERROR
+    #define log_err(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_ERROR, __VA_ARGS__); } while (0)
+  #else
+    #define log_err(...) do {} while (0)
+  #endif
+
+  #if LOG_ENABLE_PRINT
+    #define log_print(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+  #else
+    #define log_print(...) do {} while (0)
+  #endif
 
 #endif
 
+#if LOG_ENABLE_FLOAT
+  #define log_float(Value) \
+    RTT_LogFloat3((float)(Value), NULL)
+  #define log_float_desc(Description, Value) \
+    RTT_LogFloat3((float)(Value), (Description))
+#else
+  #define log_float(Value) do {} while (0)
+  #define log_float_desc(Description, Value) do {} while (0)
+#endif
 
-#endif // __RTT_H__
-
-/*************************** End of file ****************************/
+#endif
