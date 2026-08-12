@@ -51,7 +51,7 @@ C_INCLUDES += $(EXTRA_INCLUDES)
 # compile gcc flags
 
 # segger_rtt.mk 会把 RTT 的大写 .S 汇编源加入 ASMM_SOURCES，
-# 并提供对应的源文件搜索路径。
+# 并提供对应的模式编译规则。
 
 # *** EOF ***
 
