@@ -24,8 +24,14 @@ _Static_assert(SEGGER_RTT__CB_SIZE == 72,
 static char Output[512];
 static unsigned OutputLength;
 static unsigned WriteCount;
+static unsigned WriteAttemptCount;
+static int ForceWriteFailure;
 
 unsigned SEGGER_RTT_Write(unsigned BufferIndex, const void * pBuffer, unsigned NumBytes) {
+  WriteAttemptCount++;
+  if (ForceWriteFailure) {
+    return 0u;
+  }
   if (BufferIndex != RTT_LOG_BUFFER_INDEX) {
     return 0u;
   }
@@ -42,6 +48,8 @@ static void reset_output(void) {
   memset(Output, 0, sizeof(Output));
   OutputLength = 0u;
   WriteCount = 0u;
+  WriteAttemptCount = 0u;
+  ForceWriteFailure = 0;
 }
 
 static void expect_output(const char * Expected) {
@@ -261,7 +269,7 @@ static void test_float(void) {
   } Special;
 
   reset_output();
-  log_float_desc("value", 1.25f);
+  log_float_label(1.25f, "value");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("value: 1.250\n");
 #else
@@ -277,7 +285,7 @@ static void test_float(void) {
 #endif
 
   reset_output();
-  log_float_desc("negative", -2.5f);
+  log_float_label(-2.5f, "negative");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("negative: -2.500\n");
 #else
@@ -285,7 +293,7 @@ static void test_float(void) {
 #endif
 
   reset_output();
-  log_float_desc("zero", 0.0f);
+  log_float_label(0.0f, "zero");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("zero: 0.000\n");
 #else
@@ -293,7 +301,7 @@ static void test_float(void) {
 #endif
 
   reset_output();
-  log_float_desc("truncate", 1.9996f);
+  log_float_label(1.9996f, "truncate");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("truncate: 1.999\n");
 #else
@@ -301,7 +309,7 @@ static void test_float(void) {
 #endif
 
   reset_output();
-  log_float_desc("small", 0.001953125f);
+  log_float_label(0.001953125f, "small");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("small: 0.001\n");
 #else
@@ -309,7 +317,7 @@ static void test_float(void) {
 #endif
 
   reset_output();
-  log_float_desc("negative truncate", -1.9996f);
+  log_float_label(-1.9996f, "negative truncate");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("negative truncate: -1.999\n");
 #else
@@ -318,7 +326,7 @@ static void test_float(void) {
 
   Special.Bits = 0x4F000000u;
   reset_output();
-  log_float_desc("above int max", Special.Value);
+  log_float_label(Special.Value, "above int max");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("above int max: 2147483648.000\n");
 #else
@@ -327,7 +335,7 @@ static void test_float(void) {
 
   Special.Bits = 0xCF000000u;
   reset_output();
-  log_float_desc("below int min", Special.Value);
+  log_float_label(Special.Value, "below int min");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("below int min: -2147483648.000\n");
 #else
@@ -336,7 +344,7 @@ static void test_float(void) {
 
   Special.Bits = 0x4F800000u;
   reset_output();
-  log_float_desc("overflow", Special.Value);
+  log_float_label(Special.Value, "overflow");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("overflow: Overflow\n");
 #else
@@ -345,7 +353,7 @@ static void test_float(void) {
 
   Special.Bits = 0xCF800000u;
   reset_output();
-  log_float_desc("negative overflow", Special.Value);
+  log_float_label(Special.Value, "negative overflow");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("negative overflow: -Overflow\n");
 #else
@@ -354,7 +362,7 @@ static void test_float(void) {
 
   Special.Bits = 0x7FC00000u;
   reset_output();
-  log_float_desc("nan", Special.Value);
+  log_float_label(Special.Value, "nan");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("nan: NaN\n");
 #else
@@ -363,7 +371,7 @@ static void test_float(void) {
 
   Special.Bits = 0x7F800000u;
   reset_output();
-  log_float_desc("infinity", Special.Value);
+  log_float_label(Special.Value, "infinity");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("infinity: Inf\n");
 #else
@@ -372,10 +380,31 @@ static void test_float(void) {
 
   Special.Bits = 0xFF800000u;
   reset_output();
-  log_float_desc("negative infinity", Special.Value);
+  log_float_label(Special.Value, "negative infinity");
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("negative infinity: -Inf\n");
 #else
+  expect_output("");
+#endif
+
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  reset_output();
+  ForceWriteFailure = 1;
+  log_float_label(1.25f, "full");
+  if (WriteAttemptCount != 1u) {
+    fprintf(stderr, "float value retried a failed RTT write\n");
+    exit(1);
+  }
+  expect_output("");
+
+  Special.Bits = 0x7FC00000u;
+  reset_output();
+  ForceWriteFailure = 1;
+  log_float_label(Special.Value, "full");
+  if (WriteAttemptCount != 1u) {
+    fprintf(stderr, "float special value retried a failed RTT write\n");
+    exit(1);
+  }
   expect_output("");
 #endif
 }

@@ -59,6 +59,7 @@
 #define FORMAT_FLAG_PAD_ZERO     (1u << 1)
 #define FORMAT_FLAG_PRINT_SIGN   (1u << 2)
 
+/* 一次格式化过程的输出状态；Buffer 只暂存小块数据，不限制整条消息长度。 */
 typedef struct {
   unsigned BufferIndex;
   unsigned Count;
@@ -86,6 +87,7 @@ static RTT_PRINTF_ALWAYS_INLINE void _Flush(RTT_PRINTF_DESC * pDesc) {
   if (Used == 0u) {
     return;
   }
+  /* SEGGER_RTT_Write 短写即视为整次格式化失败，不重复已写出的字节。 */
   if (SEGGER_RTT_Write(pDesc->BufferIndex, pDesc->Buffer, Used) != Used) {
     pDesc->Error = -1;
     return;
@@ -101,6 +103,7 @@ static void _Store(RTT_PRINTF_DESC * pDesc,
     unsigned Avail;
     unsigned Chunk;
 
+    /* 按剩余空间分块，使任意长度的字段都能通过固定大小缓冲区输出。 */
     Avail = SEGGER_RTT_PRINTF_BUFFER_SIZE - pDesc->Used;
     Chunk = (Length < Avail) ? Length : Avail;
     if (pData != NULL) {
@@ -151,7 +154,7 @@ static uintptr_t _DivideBy10(uintptr_t Value, unsigned * pRemainder) {
 #if defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_8M_BASE__)
   uintptr_t Quotient;
 
-  // Exact 32-bit division by 10 without pulling in the Armv6-M divide helper.
+  /* 精确计算 32 位无符号数除以 10，避免 Armv6-M 引入除法辅助函数。 */
   Quotient = (Value >> 1) + (Value >> 2);
   Quotient += Quotient >> 4;
   Quotient += Quotient >> 8;
@@ -214,6 +217,7 @@ static void _PrintNumber(RTT_PRINTF_DESC * pDesc,
   NumDigits = (unsigned)(pEnd - pDigits);
   FormatFlags = pFormat->Flags;
   Precision = pFormat->Precision;
+  /* UINT_MAX 表示格式串没有指定精度；显式精度会覆盖 '0' 补齐标志。 */
   if (Precision == UINT_MAX) {
     Precision = 0u;
   } else {
@@ -268,6 +272,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
   Desc.Used = 0u;
   Desc.Error = 0;
 
+  /* 三段内容共用 Desc，长消息会自动多次刷新，但总字符数连续累计。 */
   _PrintString(&Desc, pPrefix, UINT_MAX);
 
   while ((*sFormat != '\0') && (Desc.Error == 0)) {
@@ -276,6 +281,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
     RTT_FORMAT_DESC Format;
     char Specifier;
 
+    /* 先批量复制普通文本，再解析紧随其后的单个转换说明。 */
     pLiteral = sFormat;
     while ((*sFormat != '\0') && (*sFormat != '%')) {
       sFormat++;
@@ -327,6 +333,10 @@ int RTT_vprintfFramed(unsigned BufferIndex,
     }
     sFormat++;
 
+    /*
+     * 为控制固件体积，仅实现 c/d/u/x/X/s/p/%。不支持的转换说明按原文
+     * 输出，且不会取走可变参数，便于在 RTT 中直接发现格式串不兼容。
+     */
     switch (Specifier) {
     case 'c': {
       char Value;
@@ -342,6 +352,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
 
       Value = va_arg(*pParamList, int);
       if (Value < 0) {
+        /* 先转无符号再求补码绝对值，可安全处理 INT_MIN。 */
         Magnitude = 0u - (unsigned)Value;
         Sign = '-';
       } else {
@@ -378,6 +389,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
       unsigned PointerDigits;
 
       Value = (uintptr_t)va_arg(*pParamList, void *);
+      /* 指针固定输出为无 0x 前缀、按架构位宽补零的大写十六进制。 */
       PointerDigits = (unsigned)(sizeof(uintptr_t) * 2u);
       Format.Flags = 0u;
       Format.FieldWidth = PointerDigits;
@@ -394,6 +406,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
     }
   }
 
+  /* 仅在正文完整时追加后缀，避免写失败后继续产生残缺日志。 */
   if (Desc.Error == 0) {
     _PrintString(&Desc, pSuffix, UINT_MAX);
   }

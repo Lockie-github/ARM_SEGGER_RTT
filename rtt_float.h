@@ -3,6 +3,10 @@
 
 #include <rtt_cfg.h>
 
+/*
+ * 置 1 后允许使用 modff 拆分浮点数，适用于目标芯片和编译选项均启用
+ * 硬件 FPU 的工程；否则使用不依赖浮点运行库的 IEEE-754 位解析路径。
+ */
 #ifndef HARD_FPU_ENABLE
   #define HARD_FPU_ENABLE 0
 #endif
@@ -11,10 +15,19 @@
 extern "C" {
 #endif
 
+/**
+ * @brief 以固定三位小数输出一个单精度浮点数。
+ *
+ * 小数部分直接截断到三位，不执行四舍五入。NaN、正负无穷及超出
+ * uint32_t 整数部分表示范围的值，分别输出对应的可读文本。
+ *
+ * @param Value        待输出的单精度浮点数。
+ * @param sDescription 可选说明文字；传入 NULL 时只输出数值。
+ */
 void RTT_LogFloat3(float Value, const char * sDescription);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // RTT_FLOAT_H
+#endif /* RTT_FLOAT_H */

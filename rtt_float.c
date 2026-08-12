@@ -17,20 +17,10 @@
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
 
 static void rtt_log_float_text(const char * sDescription, const char * sText) {
-  volatile int Timeout;
-
-  Timeout = 100;
-  while (Timeout-- > 0) {
-    int Result;
-
-    if (sDescription != NULL) {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s\n", sDescription, sText);
-    } else {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s\n", sText);
-    }
-    if (Result >= 0) {
-      break;
-    }
+  if (sDescription != NULL) {
+    (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s\n", sDescription, sText);
+  } else {
+    (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s\n", sText);
   }
 }
 
@@ -39,28 +29,20 @@ static void rtt_log_float_parts(const char * sDescription,
                                 uint32_t IntegerPart,
                                 unsigned DecimalPart) {
   const char * sSign;
-  volatile int Timeout;
 
   sSign = Negative ? "-" : "";
-  Timeout = 100;
-  while (Timeout-- > 0) {
-    int Result;
-
-    if (sDescription != NULL) {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%u.%03u\n",
-                                 sDescription, sSign, IntegerPart, DecimalPart);
-    } else {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s%u.%03u\n",
-                                 sSign, IntegerPart, DecimalPart);
-    }
-    if (Result >= 0) {
-      break;
-    }
+  if (sDescription != NULL) {
+    (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%u.%03u\n",
+                            sDescription, sSign, IntegerPart, DecimalPart);
+  } else {
+    (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s%u.%03u\n",
+                            sSign, IntegerPart, DecimalPart);
   }
 }
 
 #if HARD_FPU_ENABLE
 
+/* 硬件 FPU 路径直接使用 modff，代码简单，但会依赖目标的浮点运行库。 */
 void RTT_LogFloat3(float Value, const char * sDescription) {
   float IntegerPart;
   float Fraction;
@@ -69,10 +51,12 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   unsigned DecimalPart;
   unsigned Negative;
 
+  /* IEEE-754 中只有 NaN 不等于自身。 */
   if (Value != Value) {
     rtt_log_float_text(sDescription, "NaN");
     return;
   }
+  /* 有限数相减为 0；无穷减自身产生 NaN，由此避免额外的 isinf 依赖。 */
   if ((Value == Value) && ((Value - Value) != (Value - Value))) {
     rtt_log_float_text(sDescription, Value < 0.0f ? "-Inf" : "Inf");
     return;
@@ -88,6 +72,7 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   IntegerPart = 0.0f;
   Fraction = modff(Magnitude, &IntegerPart);
   IntegerPartAbs = (uint32_t)IntegerPart;
+  /* 固定三位小数采用截断语义，与无 FPU 路径保持一致。 */
   DecimalPart = (unsigned)(Fraction * 1000.0f);
 
   rtt_log_float_parts(sDescription, Negative, IntegerPartAbs, DecimalPart);
@@ -95,6 +80,10 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
 
 #else
 
+/*
+ * 无 FPU 路径按 IEEE-754 binary32 的符号位、指数和尾数拆出十进制整数及
+ * 三位小数，避免链接 modff 和软浮点除法。pSpecial 单独返回特殊值类别。
+ */
 static void rtt_float_to_parts(float Value,
                                uint32_t * pIntegerPart,
                                unsigned * pDecimalPart,
@@ -124,6 +113,7 @@ static void rtt_float_to_parts(float Value,
     return;
   }
 
+  /* 规格化数补回隐含的最高位：Value = Mantissa * 2^(Exponent - 150)。 */
   Mantissa |= 0x800000u;
   Shift = (int)Exponent - 150;
   if (Shift >= 0) {
@@ -140,6 +130,7 @@ static void rtt_float_to_parts(float Value,
     FractionShift = (unsigned)-Shift;
     if (FractionShift >= 32u) {
       *pIntegerPart = 0u;
+      /* Mantissa * 1000 / 2^n = Mantissa * 125 / 2^(n-3)。 */
       ScaledFraction = (Mantissa << 7) - (Mantissa << 1) - Mantissa;
       if (FractionShift >= 35u) {
         *pDecimalPart = 0u;
@@ -150,7 +141,7 @@ static void rtt_float_to_parts(float Value,
     }
     *pIntegerPart = Mantissa >> FractionShift;
     FractionBits = Mantissa & ((1u << FractionShift) - 1u);
-    /* FractionBits * 125 fits in 32 bits and avoids divide helpers on Cortex-M0. */
+    /* FractionBits * 125 不溢出 uint32_t，同时避免 Cortex-M0 的除法辅助函数。 */
     ScaledFraction = (FractionBits << 7) - (FractionBits << 1) - FractionBits;
     if (FractionShift >= 3u) {
       *pDecimalPart = (unsigned)(ScaledFraction >> (FractionShift - 3u));
@@ -174,6 +165,7 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   } else if (Special == RTT_FLOAT_SPECIAL_OVERFLOW) {
     rtt_log_float_text(sDescription, Negative ? "-Overflow" : "Overflow");
   } else {
+    /* 输出时将 -0 和绝对值小于 0.001 的负数统一规范为 0.000。 */
     if ((IntegerPart == 0u) && (DecimalPart == 0u)) {
       Negative = 0u;
     }
@@ -185,6 +177,7 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
 
 #else
 
+/* 模块关闭时保留符号，避免直接调用方因条件编译产生链接差异。 */
 void RTT_LogFloat3(float Value, const char * sDescription) {
   (void)Value;
   (void)sDescription;

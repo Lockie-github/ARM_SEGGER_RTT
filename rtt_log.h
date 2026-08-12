@@ -5,6 +5,15 @@
 
 #include "SEGGER_RTT.h"
 
+/*
+ * 日志配置分为三层：
+ * 1. RTT_LOG_ENABLE 控制整个日志模块；
+ * 2. LOG_ENABLE_LITE 控制是否省略级别前缀和终端颜色；
+ * 3. LOG_ENABLE_xxx 分别控制各级别及浮点日志。
+ *
+ * 应用可在自己的 rtt_cfg.h 或编译选项中预先定义这些宏。这里仅提供
+ * 默认值，因而无需修改本文件即可裁剪不需要的日志代码。
+ */
 #ifndef RTT_LOG_ENABLE
   #define RTT_LOG_ENABLE 1
 #endif
@@ -30,17 +39,21 @@
   #define LOG_ENABLE_LITE  0
 #endif
 
+/* 日志写入的 RTT Up Buffer 通道号，默认使用终端通道 0。 */
 #ifndef RTT_LOG_BUFFER_INDEX
   #define RTT_LOG_BUFFER_INDEX 0u
 #endif
+/* 非轻量模式下是否输出 ANSI 颜色控制序列。 */
 #ifndef RTT_LOG_USE_COLOR
   #define RTT_LOG_USE_COLOR 1
 #endif
 
+/* 关闭日志或浮点日志后，不再引入浮点格式化接口。 */
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #include "rtt_float.h"
 #endif
 
+/* 让 GCC/Clang 在编译期检查 RTT_LogPrintf 的格式串和可变参数。 */
 #if defined(__GNUC__) || defined(__clang__)
   #define RTT_LOG_FORMAT_ATTRIBUTE(FormatIndex, FirstArgument) \
     __attribute__((format(printf, FormatIndex, FirstArgument)))
@@ -48,6 +61,7 @@
   #define RTT_LOG_FORMAT_ATTRIBUTE(FormatIndex, FirstArgument)
 #endif
 
+/* PRINT 用于无级别前缀的普通输出，其余枚举值对应带级别的日志。 */
 typedef enum {
   RTT_LOG_LEVEL_INFO,
   RTT_LOG_LEVEL_DEBUG,
@@ -60,6 +74,17 @@ typedef enum {
 extern "C" {
 #endif
 
+/**
+ * @brief 按指定级别格式化日志，并写入 RTT_LOG_BUFFER_INDEX 通道。
+ *
+ * 非轻量模式会根据 Level 添加级别前缀；启用颜色时还会添加颜色和复位
+ * 控制序列。每条日志统一以换行符结尾。RTT_LOG_LEVEL_PRINT 只输出正文
+ * 和换行符，不添加级别或颜色。
+ *
+ * @param Level   日志级别。
+ * @param pFormat printf 风格格式字符串。
+ * @return 格式化及写入结果；模块关闭时固定返回 0。
+ */
 int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
   RTT_LOG_FORMAT_ATTRIBUTE(2, 3);
 
@@ -69,6 +94,14 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
 }
 #endif
 
+/*
+ * 对外优先使用以下宏，而不是直接调用 RTT_LogPrintf。关闭某个级别后，
+ * 对应宏展开为空语句，传入的表达式也不会被求值。do-while(0) 使宏在
+ * if/else 等语句中保持与普通函数调用相同的使用方式。
+ *
+ * 轻量模式仍保留各级别的独立开关，但统一按 PRINT 输出，省略级别前缀
+ * 和颜色，从而减小固件体积。
+ */
 #if RTT_LOG_ENABLE
   #if LOG_ENABLE_INFO
     #if LOG_ENABLE_LITE
@@ -124,14 +157,18 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
   #define log_print(...) do {} while (0)
 #endif
 
+/*
+ * 浮点日志固定输出三位小数。Label 非空时输出 "Label: Value\n"，
+ * 否则只输出 "Value\n"。
+ */
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #define log_float(Value) \
     do { RTT_LogFloat3((float)(Value), NULL); } while (0)
-  #define log_float_desc(Description, Value) \
-    do { RTT_LogFloat3((float)(Value), (Description)); } while (0)
+  #define log_float_label(Value, Label) \
+    do { RTT_LogFloat3((float)(Value), (Label)); } while (0)
 #else
   #define log_float(Value) do {} while (0)
-  #define log_float_desc(Description, Value) do {} while (0)
+  #define log_float_label(Value, Label) do {} while (0)
 #endif
 
 #endif
