@@ -39,8 +39,10 @@ static void rtt_log_float_text(const char * sDescription, const char * sText) {
 void RTT_LogFloat3(float Value, const char * sDescription) {
   float IntegerPart;
   float Fraction;
-  int IntegerPartAbs;
-  int DecimalPart;
+  float Magnitude;
+  uint32_t IntegerPartAbs;
+  unsigned DecimalPart;
+  unsigned Negative;
   const char * sSign;
   volatile int Timeout;
 
@@ -53,27 +55,28 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
     return;
   }
 
+  Negative = Value < 0.0f;
+  sSign = Negative ? "-" : "";
+  Magnitude = Negative ? -Value : Value;
+  if (Magnitude >= 0x1p32f) {
+    rtt_log_float_text(sDescription, Negative ? "-Overflow" : "Overflow");
+    return;
+  }
+
   IntegerPart = 0.0f;
-  Fraction = modff(Value, &IntegerPart);
-  IntegerPartAbs = (int)(IntegerPart < 0.0f ? -IntegerPart : IntegerPart);
-  sSign = (Value < 0.0f) ? "-" : "";
-  DecimalPart = (int)(Fraction * 1000.0f + (Fraction < 0.0f ? -0.5f : 0.5f));
-  if (DecimalPart < 0) {
-    DecimalPart = -DecimalPart;
-  }
-  if (DecimalPart > 999) {
-    DecimalPart = 999;
-  }
+  Fraction = modff(Magnitude, &IntegerPart);
+  IntegerPartAbs = (uint32_t)IntegerPart;
+  DecimalPart = (unsigned)(Fraction * 1000.0f);
 
   Timeout = 100;
   while (Timeout-- > 0) {
     int Result;
 
     if (sDescription != NULL) {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%d.%03d\n",
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%u.%03u\n",
                                  sDescription, sSign, IntegerPartAbs, DecimalPart);
     } else {
-      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s%d.%03d\n",
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s%u.%03u\n",
                                  sSign, IntegerPartAbs, DecimalPart);
     }
     if (Result >= 0) {

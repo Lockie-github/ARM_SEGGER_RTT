@@ -277,6 +277,58 @@ static void test_float(void) {
   expect_output("");
 #endif
 
+  reset_output();
+  log_float_desc("truncate", 1.9996f);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("truncate: 1.999\n");
+#else
+  expect_output("");
+#endif
+
+  reset_output();
+  log_float_desc("negative truncate", -1.9996f);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("negative truncate: -1.999\n");
+#else
+  expect_output("");
+#endif
+
+  Special.Bits = 0x4F000000u;
+  reset_output();
+  log_float_desc("above int max", Special.Value);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("above int max: 2147483648.000\n");
+#else
+  expect_output("");
+#endif
+
+  Special.Bits = 0xCF000000u;
+  reset_output();
+  log_float_desc("below int min", Special.Value);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("below int min: -2147483648.000\n");
+#else
+  expect_output("");
+#endif
+
+  Special.Bits = 0x4F800000u;
+  reset_output();
+  log_float_desc("overflow", Special.Value);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("overflow: Overflow\n");
+#else
+  expect_output("");
+#endif
+
+  Special.Bits = 0xCF800000u;
+  reset_output();
+  log_float_desc("negative overflow", Special.Value);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("negative overflow: -Overflow\n");
+#else
+  expect_output("");
+#endif
+
   Special.Bits = 0x7FC00000u;
   reset_output();
   log_float_desc("nan", Special.Value);

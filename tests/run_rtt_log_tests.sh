@@ -44,3 +44,4 @@ build_and_run "individual_disabled" \
   -DLOG_ENABLE_INFO=0 -DLOG_ENABLE_DEBUG=0 -DLOG_ENABLE_WARN=0 \
   -DLOG_ENABLE_ERROR=0 -DLOG_ENABLE_PRINT=0 -DLOG_ENABLE_FLOAT=0
 build_and_run "config_override" -I"$SCRIPT_DIR/config_override"
+build_and_run "fpu" -DHAS_FPU=1 -lm
