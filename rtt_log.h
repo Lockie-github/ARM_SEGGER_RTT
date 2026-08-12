@@ -38,7 +38,7 @@
 #endif
 
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
-  #include "rtt_core.h"
+  #include "rtt_float.h"
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

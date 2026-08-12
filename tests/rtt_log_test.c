@@ -301,6 +301,14 @@ static void test_float(void) {
 #endif
 
   reset_output();
+  log_float_desc("small", 0.001953125f);
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+  expect_output("small: 0.001\n");
+#else
+  expect_output("");
+#endif
+
+  reset_output();
   log_float_desc("negative truncate", -1.9996f);
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   expect_output("negative truncate: -1.999\n");

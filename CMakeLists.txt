@@ -2,7 +2,7 @@ add_library(arm_segger_rtt STATIC
     RTT/SEGGER_RTT.c
     rtt_printf.c
     rtt_log.c
-    rtt_core.c
+    rtt_float.c
     RTT/SEGGER_RTT_ASM_ARMv7M.S
 )
 

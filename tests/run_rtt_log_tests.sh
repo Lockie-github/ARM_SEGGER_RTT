@@ -20,7 +20,7 @@ build_and_run() {
     -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
     "$PROJECT_DIR/rtt_printf.c" \
     "$PROJECT_DIR/rtt_log.c" \
-    "$PROJECT_DIR/rtt_core.c" \
+    "$PROJECT_DIR/rtt_float.c" \
     "$SCRIPT_DIR/rtt_log_test.c" \
     -o "$output"
   "$output"
@@ -45,4 +45,4 @@ build_and_run "individual_disabled" \
   -DLOG_ENABLE_ERROR=0 -DLOG_ENABLE_PRINT=0 -DLOG_ENABLE_FLOAT=0
 build_and_run "config_override" -DRTT_TEST_CONFIG_OVERRIDE=1 \
   -I"$SCRIPT_DIR/config_override"
-build_and_run "fpu" -DHAS_FPU=1 -lm
+build_and_run "hard_fpu" -DHARD_FPU_ENABLE=1 -lm

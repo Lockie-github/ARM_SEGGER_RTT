@@ -490,7 +490,8 @@ find build -name '*.hex'
    各类日志，在完整模式和轻量模式下都独立生效。
 
 默认配置为开启总开关、关闭轻量模式，并开启所有单项日志。默认使用
-RTT Up Buffer 0 并启用 ANSI 颜色。
+RTT Up Buffer 0 并启用 ANSI 颜色。`HARD_FPU_ENABLE` 默认为 `0`；仅当目标
+和编译选项均启用硬件 FPU 时，才应在应用的 `rtt_cfg.h` 中将其设置为 `1`。
 
 使用 submodule 集成时，推荐把配置模板复制到主工程根目录：
 
@@ -504,6 +505,7 @@ cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 #define RTT_LOG_ENABLE       1
 #define LOG_ENABLE_LITE      1
 #define LOG_ENABLE_DEBUG     0
+#define HARD_FPU_ENABLE      1
 #define RTT_LOG_BUFFER_INDEX 1u
 #define RTT_LOG_USE_COLOR    0
 

@@ -2,7 +2,7 @@
 RTT_C_SOURCES = ARM_SEGGER_RTT/RTT/SEGGER_RTT.c \
 				 ARM_SEGGER_RTT/rtt_printf.c \
 				 ARM_SEGGER_RTT/rtt_log.c \
-				 ARM_SEGGER_RTT/rtt_core.c
+				 ARM_SEGGER_RTT/rtt_float.c
 
 RTT_ASM_SOURCES = ARM_SEGGER_RTT/RTT/SEGGER_RTT_ASM_ARMv7M.S
 

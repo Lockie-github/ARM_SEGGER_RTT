@@ -28,7 +28,7 @@ build_one() {
       -o "$build_dir/${source%.c}.o"
   done
 
-  for source in rtt_printf.c rtt_log.c rtt_core.c; do
+  for source in rtt_printf.c rtt_log.c rtt_float.c; do
     "$CC" "$@" -"$optimization" -std=c11 -ffunction-sections \
       -fdata-sections -Wall -Wextra -Werror \
       -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
@@ -45,7 +45,7 @@ build_one() {
     "$build_dir/SEGGER_RTT.o" \
     "$build_dir/rtt_printf.o" \
     "$build_dir/rtt_log.o" \
-    "$build_dir/rtt_core.o" \
+    "$build_dir/rtt_float.o" \
     "$build_dir/SEGGER_RTT_ASM_ARMv7M.o"
 
   "$CC" "$@" -"$optimization" -std=c11 -ffunction-sections \

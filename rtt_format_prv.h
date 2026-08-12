@@ -1,5 +1,5 @@
-#ifndef RTT_PRINTF_INTERNAL_H
-#define RTT_PRINTF_INTERNAL_H
+#ifndef RTT_FORMAT_PRV_H
+#define RTT_FORMAT_PRV_H
 
 #include <stdarg.h>
 

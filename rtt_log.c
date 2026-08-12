@@ -1,5 +1,5 @@
 #include "rtt_log.h"
-#include "rtt_printf.h"
+#include "rtt_format_prv.h"
 
 #include <stdarg.h>
 

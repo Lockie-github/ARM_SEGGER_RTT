@@ -41,7 +41,7 @@
 
 #include "SEGGER_RTT.h"
 #include "SEGGER_RTT_Conf.h"
-#include "rtt_printf.h"
+#include "rtt_format_prv.h"
 
 #include <limits.h>
 #include <stdarg.h>
