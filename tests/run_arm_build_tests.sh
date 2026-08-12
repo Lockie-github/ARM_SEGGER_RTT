@@ -37,7 +37,7 @@ build_one() {
   done
 
   "$CC" "$@" -"$optimization" -x assembler-with-cpp \
-    -I"$PROJECT_DIR/RTT" \
+    -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
     -c "$PROJECT_DIR/RTT/SEGGER_RTT_ASM_ARMv7M.S" \
     -o "$build_dir/SEGGER_RTT_ASM_ARMv7M.o"
 

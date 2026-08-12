@@ -20,4 +20,11 @@
 /* #define RTT_LOG_BUFFER_INDEX 0u */
 /* #define RTT_LOG_USE_COLOR    1 */
 
+/* SEGGER RTT transport and buffer configuration. */
+/* #define SEGGER_RTT_MAX_NUM_UP_BUFFERS   3 */
+/* #define SEGGER_RTT_MAX_NUM_DOWN_BUFFERS 3 */
+/* #define BUFFER_SIZE_UP                  1024 */
+/* #define BUFFER_SIZE_DOWN                16 */
+/* #define SEGGER_RTT_PRINTF_BUFFER_SIZE   64u */
+
 #endif

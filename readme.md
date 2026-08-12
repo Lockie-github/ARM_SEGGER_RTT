@@ -506,10 +506,31 @@ cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 #define LOG_ENABLE_DEBUG     0
 #define RTT_LOG_BUFFER_INDEX 1u
 #define RTT_LOG_USE_COLOR    0
+
+#define SEGGER_RTT_MAX_NUM_UP_BUFFERS   3
+#define SEGGER_RTT_MAX_NUM_DOWN_BUFFERS 3
+#define BUFFER_SIZE_UP                  1024
+#define BUFFER_SIZE_DOWN                16
+#define SEGGER_RTT_PRINTF_BUFFER_SIZE   64u
 ```
 
 CMake 和 `segger_rtt.mk` 都会优先搜索主工程根目录，因此该文件可以覆盖
-子模块中 `rtt_log.h` 的默认配置，无需修改或提交子模块内容。CMake 工程
+日志配置以及 `SEGGER_RTT_Conf.h` 中的 RTT 通道、传输缓冲区和格式化栈缓冲
+默认值，无需修改或提交子模块内容。`BUFFER_SIZE_UP` 和 `BUFFER_SIZE_DOWN`
+占用静态 RAM；`SEGGER_RTT_PRINTF_BUFFER_SIZE` 是每次格式化调用的栈缓冲区。
+以上数值与 SEGGER RTT 源码默认值一致。上行环形缓冲区会保留一个字节用于
+区分空和满，因此默认 1024 B 缓冲区最多保存 1023 B 尚未被主机读取的数据。
+缩小缓冲区会增加突发日志被丢弃的概率。
+
+修改这些底层配置后必须清理全部 RTT 对象并重新编译，以保证应用代码和
+`SEGGER_RTT.c` 看到一致的控制块布局：
+
+```shell
+make clean
+make -j
+```
+
+CMake 工程
 如需把配置放在其他目录，可以在配置阶段指定：
 
 ```cmake
@@ -523,6 +544,24 @@ Make 工程可以在包含 `segger_rtt.mk` 前指定其他配置目录：
 RTT_CONFIG_DIR := config
 include ARM_SEGGER_RTT/segger_rtt.mk
 ```
+
+RTT 的 C 源码默认单独使用 `-Os`，主工程的优化等级不受影响。Make 工程可在
+包含 `segger_rtt.mk` 前覆盖优化选项；设为空值表示继承主工程的 `CFLAGS`：
+
+```make
+ARM_SEGGER_RTT_OPTIMIZATION := -Og
+include ARM_SEGGER_RTT/segger_rtt.mk
+```
+
+CMake 工程可在 `add_subdirectory` 前覆盖同名缓存变量：
+
+```cmake
+set(ARM_SEGGER_RTT_OPTIMIZATION "-Og" CACHE STRING "" FORCE)
+add_subdirectory(ARM_SEGGER_RTT)
+```
+
+修改优化选项后必须清理旧对象再重新构建。GCC 和 Clang 同时收到项目优化
+选项和 RTT 专用选项时，以编译命令中靠后的 RTT 专用选项为准。
 
 应用源码与 `rtt_log.c` 必须使用同一个配置目录，仓库提供的 CMake 和 Make
 集成已经保证这一点。若使用命令行 `-D` 临时配置，请不要在项目级

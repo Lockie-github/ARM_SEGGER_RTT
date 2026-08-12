@@ -6,6 +6,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef RTT_TEST_CONFIG_OVERRIDE
+_Static_assert(SEGGER_RTT_MAX_NUM_UP_BUFFERS == 1,
+               "rtt_cfg.h must override the up-buffer count");
+_Static_assert(SEGGER_RTT_MAX_NUM_DOWN_BUFFERS == 1,
+               "rtt_cfg.h must override the down-buffer count");
+_Static_assert(BUFFER_SIZE_UP == 257,
+               "rtt_cfg.h must override the up-buffer size");
+_Static_assert(BUFFER_SIZE_DOWN == 3,
+               "rtt_cfg.h must override the down-buffer size");
+_Static_assert(SEGGER_RTT_PRINTF_BUFFER_SIZE == 17u,
+               "rtt_cfg.h must override the printf buffer size");
+_Static_assert(SEGGER_RTT__CB_SIZE == 72,
+               "one up and one down channel must use a 72-byte RTT control block");
+#endif
+
 static char Output[512];
 static unsigned OutputLength;
 static unsigned WriteCount;
