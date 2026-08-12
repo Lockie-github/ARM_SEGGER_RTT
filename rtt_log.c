@@ -3,8 +3,13 @@
 
 #include <stdarg.h>
 
+#if RTT_LOG_ENABLE
+
 static const char * rtt_log_prefix(RTT_LOG_LEVEL Level) {
-#if RTT_LOG_USE_COLOR
+#if LOG_ENABLE_LITE
+  (void)Level;
+  return "";
+#elif RTT_LOG_USE_COLOR
   switch (Level) {
   case RTT_LOG_LEVEL_INFO:
     return RTT_CTRL_TEXT_BRIGHT_GREEN "[INFO] ";
@@ -34,7 +39,9 @@ static const char * rtt_log_prefix(RTT_LOG_LEVEL Level) {
 }
 
 static const char * rtt_log_suffix(RTT_LOG_LEVEL Level) {
-#if RTT_LOG_USE_COLOR
+#if LOG_ENABLE_LITE
+  (void)Level;
+#elif RTT_LOG_USE_COLOR
   if (Level != RTT_LOG_LEVEL_PRINT) {
     return RTT_CTRL_RESET "\n";
   }
@@ -57,3 +64,13 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...) {
   va_end(ParamList);
   return Result;
 }
+
+#else
+
+int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...) {
+  (void)Level;
+  (void)pFormat;
+  return 0;
+}
+
+#endif

@@ -475,26 +475,54 @@ find build -name '*.hex'
 
 # 日志配置
 
-`rtt_log.h` 默认使用 RTT Up Buffer 0 并启用 ANSI 颜色。日志前缀和颜色
-由 `RTT/rtt_log.c` 编译，因此配置必须应用到 `arm_segger_rtt` 库目标本身。
+日志配置分为三级：
+
+1. `RTT_LOG_ENABLE` 是总开关。设置为 `0` 时所有 `log_*` 宏均不输出，
+   且宏参数不会被求值。
+2. `LOG_ENABLE_LITE` 是轻量模式开关。设置为 `1` 时，已启用的日志只
+   输出正文和换行，不输出颜色及等级前缀。
+3. `LOG_ENABLE_INFO`、`LOG_ENABLE_DEBUG`、`LOG_ENABLE_WARN`、
+   `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT` 和 `LOG_ENABLE_FLOAT` 分别控制
+   各类日志，在完整模式和轻量模式下都独立生效。
+
+默认配置为开启总开关、关闭轻量模式，并开启所有单项日志。默认使用
+RTT Up Buffer 0 并启用 ANSI 颜色。
+
+使用 submodule 集成时，推荐把配置模板复制到主工程根目录：
+
+```shell
+cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
+```
+
+然后在主工程的 `rtt_cfg.h` 中取消所需配置项的注释并修改。例如：
+
+```c
+#define RTT_LOG_ENABLE       1
+#define LOG_ENABLE_LITE      1
+#define LOG_ENABLE_DEBUG     0
+#define RTT_LOG_BUFFER_INDEX 1u
+#define RTT_LOG_USE_COLOR    0
+```
+
+CMake 和 `segger_rtt.mk` 都会优先搜索主工程根目录，因此该文件可以覆盖
+子模块中 `rtt_log.h` 的默认配置，无需修改或提交子模块内容。CMake 工程
+如需把配置放在其他目录，可以在配置阶段指定：
 
 ```cmake
-target_compile_definitions(arm_segger_rtt PUBLIC
-    RTT_LOG_BUFFER_INDEX=1
-    RTT_LOG_USE_COLOR=0
-)
+set(ARM_SEGGER_RTT_CONFIG_DIR "${CMAKE_SOURCE_DIR}/config" CACHE PATH "" FORCE)
+add_subdirectory(ARM_SEGGER_RTT)
 ```
 
-Make 工程应把相同定义加入编译 `RTT/rtt_log.c` 时使用的全局 C flags：
+Make 工程可以在包含 `segger_rtt.mk` 前指定其他配置目录：
 
 ```make
-CFLAGS += -DRTT_LOG_BUFFER_INDEX=1
-CFLAGS += -DRTT_LOG_USE_COLOR=0
+RTT_CONFIG_DIR := config
+include ARM_SEGGER_RTT/segger_rtt.mk
 ```
 
-`RTT_LOG_BUFFER_INDEX` 默认为 `0u`，`RTT_LOG_USE_COLOR` 默认为 `1`。
-各 `LOG_ENABLE_*` 开关也可以通过编译定义覆盖；`LOG_ENABLE_LITE=1` 时，
-普通日志只输出正文和换行，不输出颜色及等级前缀。
+应用源码与 `rtt_log.c` 必须使用同一个配置目录，仓库提供的 CMake 和 Make
+集成已经保证这一点。若使用命令行 `-D` 临时配置，请不要在项目级
+`rtt_cfg.h` 中重复定义同一个宏。
 
 # 修订记录:
 | 文档版本 | 修订时间 | 修改内容 | 备注 |

@@ -1,10 +1,11 @@
 #include "rtt_core.h"
+#include "rtt_log.h"
 #include "SEGGER_RTT.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-#if HAS_FPU
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT && HAS_FPU
   #include <math.h>
 #endif
 
@@ -13,7 +14,8 @@
 #define RTT_FLOAT_SPECIAL_INFINITY (2u)
 #define RTT_FLOAT_SPECIAL_OVERFLOW (3u)
 
-#if !HAS_FPU
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+
 static void rtt_log_float_text(const char * sDescription, const char * sText) {
   volatile int Timeout;
 
@@ -22,16 +24,15 @@ static void rtt_log_float_text(const char * sDescription, const char * sText) {
     int Result;
 
     if (sDescription != NULL) {
-      Result = SEGGER_RTT_printf(0, "%s: %s\n", sDescription, sText);
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s\n", sDescription, sText);
     } else {
-      Result = SEGGER_RTT_printf(0, "%s\n", sText);
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s\n", sText);
     }
     if (Result >= 0) {
       break;
     }
   }
 }
-#endif
 
 #if HAS_FPU
 
@@ -44,11 +45,11 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   volatile int Timeout;
 
   if (Value != Value) {
-    SEGGER_RTT_printf(0, "NaN\n");
+    rtt_log_float_text(sDescription, "NaN");
     return;
   }
   if ((Value == Value) && ((Value - Value) != (Value - Value))) {
-    SEGGER_RTT_printf(0, "%sInf\n", Value < 0.0f ? "-" : "");
+    rtt_log_float_text(sDescription, Value < 0.0f ? "-Inf" : "Inf");
     return;
   }
 
@@ -69,10 +70,10 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
     int Result;
 
     if (sDescription != NULL) {
-      Result = SEGGER_RTT_printf(0, "%s: %s%d.%03d\n",
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%d.%03d\n",
                                  sDescription, sSign, IntegerPartAbs, DecimalPart);
     } else {
-      Result = SEGGER_RTT_printf(0, "%s%d.%03d\n",
+      Result = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s%d.%03d\n",
                                  sSign, IntegerPartAbs, DecimalPart);
     }
     if (Result >= 0) {
@@ -175,6 +176,15 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
     rtt_milli_to_text(Milli, Negative, Text);
     rtt_log_float_text(sDescription, Text);
   }
+}
+
+#endif
+
+#else
+
+void RTT_LogFloat3(float Value, const char * sDescription) {
+  (void)Value;
+  (void)sDescription;
 }
 
 #endif

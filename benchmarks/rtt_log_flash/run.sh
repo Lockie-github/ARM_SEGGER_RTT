@@ -28,14 +28,14 @@ for optimization in O0 Os; do
   new_formatter="$BUILD_DIR/rtt_printf_new_${optimization}.o"
   "$CC" $common_flags -"$optimization" \
     -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
-    -c "$PROJECT_DIR/RTT/rtt_log.c" -o "$collected_impl"
+    -c "$PROJECT_DIR/rtt_log.c" -o "$collected_impl"
   "$GIT" -C "$PROJECT_DIR" show "$BASELINE_REF:RTT/rtt_printf.c" | \
     "$CC" $common_flags -"$optimization" \
       -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
       -x c -c -o "$old_formatter" -
   "$CC" $common_flags -"$optimization" \
     -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
-    -c "$PROJECT_DIR/RTT/rtt_printf.c" -o "$new_formatter"
+    -c "$PROJECT_DIR/rtt_printf.c" -o "$new_formatter"
   formatter_delta=$(($(object_flash "$new_formatter") - $(object_flash "$old_formatter")))
 
   for count in 10 50 100; do

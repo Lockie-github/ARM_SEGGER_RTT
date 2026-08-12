@@ -1,8 +1,13 @@
 #ifndef ARM_SEGGER_RTT_LOG_H
 #define ARM_SEGGER_RTT_LOG_H
 
+#include <rtt_cfg.h>
+
 #include "SEGGER_RTT.h"
 
+#ifndef RTT_LOG_ENABLE
+  #define RTT_LOG_ENABLE 1
+#endif
 #ifndef LOG_ENABLE_INFO
   #define LOG_ENABLE_INFO  1
 #endif
@@ -32,7 +37,7 @@
   #define RTT_LOG_USE_COLOR 1
 #endif
 
-#if LOG_ENABLE_FLOAT
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #include "rtt_core.h"
 #endif
 
@@ -64,36 +69,43 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
 }
 #endif
 
-#if LOG_ENABLE_LITE
-
-  #define log_info(...)  do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
-  #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
-  #define log_warn(...)  do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
-  #define log_err(...)   do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
-  #define log_print(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
-
-#else
-
+#if RTT_LOG_ENABLE
   #if LOG_ENABLE_INFO
-    #define log_info(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_INFO, __VA_ARGS__); } while (0)
+    #if LOG_ENABLE_LITE
+      #define log_info(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+    #else
+      #define log_info(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_INFO, __VA_ARGS__); } while (0)
+    #endif
   #else
     #define log_info(...) do {} while (0)
   #endif
 
   #if LOG_ENABLE_DEBUG
-    #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_DEBUG, __VA_ARGS__); } while (0)
+    #if LOG_ENABLE_LITE
+      #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+    #else
+      #define log_debug(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_DEBUG, __VA_ARGS__); } while (0)
+    #endif
   #else
     #define log_debug(...) do {} while (0)
   #endif
 
   #if LOG_ENABLE_WARN
-    #define log_warn(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_WARN, __VA_ARGS__); } while (0)
+    #if LOG_ENABLE_LITE
+      #define log_warn(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+    #else
+      #define log_warn(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_WARN, __VA_ARGS__); } while (0)
+    #endif
   #else
     #define log_warn(...) do {} while (0)
   #endif
 
   #if LOG_ENABLE_ERROR
-    #define log_err(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_ERROR, __VA_ARGS__); } while (0)
+    #if LOG_ENABLE_LITE
+      #define log_err(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+    #else
+      #define log_err(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_ERROR, __VA_ARGS__); } while (0)
+    #endif
   #else
     #define log_err(...) do {} while (0)
   #endif
@@ -104,13 +116,19 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
     #define log_print(...) do {} while (0)
   #endif
 
+#else
+  #define log_info(...)  do {} while (0)
+  #define log_debug(...) do {} while (0)
+  #define log_warn(...)  do {} while (0)
+  #define log_err(...)   do {} while (0)
+  #define log_print(...) do {} while (0)
 #endif
 
-#if LOG_ENABLE_FLOAT
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #define log_float(Value) \
-    RTT_LogFloat3((float)(Value), NULL)
+    do { RTT_LogFloat3((float)(Value), NULL); } while (0)
   #define log_float_desc(Description, Value) \
-    RTT_LogFloat3((float)(Value), (Description))
+    do { RTT_LogFloat3((float)(Value), (Description)); } while (0)
 #else
   #define log_float(Value) do {} while (0)
   #define log_float_desc(Description, Value) do {} while (0)

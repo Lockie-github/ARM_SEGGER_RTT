@@ -20,11 +20,19 @@ build_one() {
   build_dir="$BUILD_ROOT/${name}_${optimization}"
   mkdir -p "$build_dir"
 
-  for source in SEGGER_RTT.c rtt_printf.c rtt_log.c rtt_core.c; do
+  for source in SEGGER_RTT.c; do
     "$CC" "$@" -"$optimization" -std=c11 -ffunction-sections \
       -fdata-sections -Wall -Wextra -Werror \
       -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
       -c "$PROJECT_DIR/RTT/$source" \
+      -o "$build_dir/${source%.c}.o"
+  done
+
+  for source in rtt_printf.c rtt_log.c rtt_core.c; do
+    "$CC" "$@" -"$optimization" -std=c11 -ffunction-sections \
+      -fdata-sections -Wall -Wextra -Werror \
+      -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
+      -c "$PROJECT_DIR/$source" \
       -o "$build_dir/${source%.c}.o"
   done
 
