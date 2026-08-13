@@ -164,11 +164,11 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #define log_float(Value) \
     do { RTT_LogFloat3((float)(Value), NULL); } while (0)
-  #define log_float_label(Value, Label) \
+  #define log_float_label(Label, Value) \
     do { RTT_LogFloat3((float)(Value), (Label)); } while (0)
 #else
   #define log_float(Value) do {} while (0)
-  #define log_float_label(Value, Label) do {} while (0)
+  #define log_float_label(Label, Value) do {} while (0)
 #endif
 
 #endif

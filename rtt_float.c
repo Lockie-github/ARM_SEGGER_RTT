@@ -16,7 +16,7 @@
 
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
 
-static void rtt_log_float_text(const char * sDescription, const char * sText) {
+static void _LogFloatText(const char * sDescription, const char * sText) {
   if (sDescription != NULL) {
     (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s\n", sDescription, sText);
   } else {
@@ -24,10 +24,10 @@ static void rtt_log_float_text(const char * sDescription, const char * sText) {
   }
 }
 
-static void rtt_log_float_parts(const char * sDescription,
-                                unsigned Negative,
-                                uint32_t IntegerPart,
-                                unsigned DecimalPart) {
+static void _LogFloatParts(const char * sDescription,
+                           unsigned Negative,
+                           uint32_t IntegerPart,
+                           unsigned DecimalPart) {
   const char * sSign;
 
   sSign = Negative ? "-" : "";
@@ -53,19 +53,19 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
 
   /* IEEE-754 中只有 NaN 不等于自身。 */
   if (Value != Value) {
-    rtt_log_float_text(sDescription, "NaN");
+    _LogFloatText(sDescription, "NaN");
     return;
   }
   /* 有限数相减为 0；无穷减自身产生 NaN，由此避免额外的 isinf 依赖。 */
   if ((Value == Value) && ((Value - Value) != (Value - Value))) {
-    rtt_log_float_text(sDescription, Value < 0.0f ? "-Inf" : "Inf");
+    _LogFloatText(sDescription, Value < 0.0f ? "-Inf" : "Inf");
     return;
   }
 
   Negative = Value < 0.0f;
   Magnitude = Negative ? -Value : Value;
   if (Magnitude >= 0x1p32f) {
-    rtt_log_float_text(sDescription, Negative ? "-Overflow" : "Overflow");
+    _LogFloatText(sDescription, Negative ? "-Overflow" : "Overflow");
     return;
   }
 
@@ -75,7 +75,7 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   /* 固定三位小数采用截断语义，与无 FPU 路径保持一致。 */
   DecimalPart = (unsigned)(Fraction * 1000.0f);
 
-  rtt_log_float_parts(sDescription, Negative, IntegerPartAbs, DecimalPart);
+  _LogFloatParts(sDescription, Negative, IntegerPartAbs, DecimalPart);
 }
 
 #else
@@ -84,11 +84,11 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
  * 无 FPU 路径按 IEEE-754 binary32 的符号位、指数和尾数拆出十进制整数及
  * 三位小数，避免链接 modff 和软浮点除法。pSpecial 单独返回特殊值类别。
  */
-static void rtt_float_to_parts(float Value,
-                               uint32_t * pIntegerPart,
-                               unsigned * pDecimalPart,
-                               unsigned * pNegative,
-                               unsigned * pSpecial) {
+static void _FloatToParts(float Value,
+                          uint32_t * pIntegerPart,
+                          unsigned * pDecimalPart,
+                          unsigned * pNegative,
+                          unsigned * pSpecial) {
   union {
     float f;
     uint32_t u;
@@ -157,19 +157,19 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   unsigned Negative;
   unsigned Special;
 
-  rtt_float_to_parts(Value, &IntegerPart, &DecimalPart, &Negative, &Special);
+  _FloatToParts(Value, &IntegerPart, &DecimalPart, &Negative, &Special);
   if (Special == RTT_FLOAT_SPECIAL_NAN) {
-    rtt_log_float_text(sDescription, "NaN");
+    _LogFloatText(sDescription, "NaN");
   } else if (Special == RTT_FLOAT_SPECIAL_INFINITY) {
-    rtt_log_float_text(sDescription, Negative ? "-Inf" : "Inf");
+    _LogFloatText(sDescription, Negative ? "-Inf" : "Inf");
   } else if (Special == RTT_FLOAT_SPECIAL_OVERFLOW) {
-    rtt_log_float_text(sDescription, Negative ? "-Overflow" : "Overflow");
+    _LogFloatText(sDescription, Negative ? "-Overflow" : "Overflow");
   } else {
     /* 输出时将 -0 和绝对值小于 0.001 的负数统一规范为 0.000。 */
     if ((IntegerPart == 0u) && (DecimalPart == 0u)) {
       Negative = 0u;
     }
-    rtt_log_float_parts(sDescription, Negative, IntegerPart, DecimalPart);
+    _LogFloatParts(sDescription, Negative, IntegerPart, DecimalPart);
   }
 }
 
