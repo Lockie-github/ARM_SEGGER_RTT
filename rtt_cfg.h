@@ -13,7 +13,7 @@
 // #define RTT_LOG_ENABLE       1     ///< 1：启用全部日志功能；0：关闭日志模块。
 
 /* 日志输出形式。 */
-// #define LOG_ENABLE_LITE      0     ///< 1：轻量输出，不添加级别前缀及 ANSI 颜色；0：完整输出。
+// #define LOG_ENABLE_LITE      0     ///< 1：轻量输出，不添加级别前缀及 ANSI 颜色；0：完整输出。建议在资源紧张的MCU配置此选项为1
 
 /* 各日志接口独立开关，仅在 RTT_LOG_ENABLE 为 1 时生效。 */
 // #define LOG_ENABLE_INFO      1     ///< 1：启用 log_info；0：移除信息级日志及其参数求值。
