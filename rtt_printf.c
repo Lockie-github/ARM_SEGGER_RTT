@@ -58,13 +58,15 @@
 #define FORMAT_FLAG_LEFT_JUSTIFY (1u << 0)
 #define FORMAT_FLAG_PAD_ZERO     (1u << 1)
 #define FORMAT_FLAG_PRINT_SIGN   (1u << 2)
+#define FORMAT_FLAG_HEX          (1u << 3)
+#define FORMAT_FLAG_NEGATIVE     (1u << 4)
+#define RTT_PRINTF_ERROR_COUNT   (1u << ((sizeof(unsigned) * CHAR_BIT) - 1u))
 
 /* 一次格式化过程的输出状态；Buffer 只暂存小块数据，不限制整条消息长度。 */
 typedef struct {
   unsigned BufferIndex;
   unsigned Count;
   unsigned Used;
-  int      Error;
   char     Buffer[SEGGER_RTT_PRINTF_BUFFER_SIZE];
 } RTT_PRINTF_DESC;
 
@@ -80,6 +82,12 @@ typedef struct {
   #define RTT_PRINTF_ALWAYS_INLINE inline
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+  #define RTT_PRINTF_NO_JUMP_TABLE __attribute__((optimize("no-jump-tables")))
+#else
+  #define RTT_PRINTF_NO_JUMP_TABLE
+#endif
+
 static RTT_PRINTF_ALWAYS_INLINE void _Flush(RTT_PRINTF_DESC * pDesc) {
   unsigned Used;
 
@@ -89,7 +97,7 @@ static RTT_PRINTF_ALWAYS_INLINE void _Flush(RTT_PRINTF_DESC * pDesc) {
   }
   /* SEGGER_RTT_Write 短写即视为整次格式化失败，不重复已写出的字节。 */
   if (SEGGER_RTT_Write(pDesc->BufferIndex, pDesc->Buffer, Used) != Used) {
-    pDesc->Error = -1;
+    pDesc->Count = RTT_PRINTF_ERROR_COUNT;
     return;
   }
   pDesc->Used = 0u;
@@ -99,7 +107,7 @@ static void _Store(RTT_PRINTF_DESC * pDesc,
                    const char * pData,
                    char Fill,
                    unsigned Length) {
-  while ((Length != 0u) && (pDesc->Error == 0)) {
+  while ((Length != 0u) && (pDesc->Count < RTT_PRINTF_ERROR_COUNT)) {
     unsigned Avail;
     unsigned Chunk;
 
@@ -195,10 +203,10 @@ static char * _BuildHex(char * pEnd, uintptr_t Value) {
 
 static void _PrintNumber(RTT_PRINTF_DESC * pDesc,
                          uintptr_t Value,
-                         unsigned Base,
-                         char Sign,
-                         const RTT_FORMAT_DESC * pFormat) {
+                         RTT_FORMAT_DESC * pFormat) {
+#if UINTPTR_MAX > UINT_MAX
   char Digits[(sizeof(uintptr_t) * 2u) + 2u];
+#endif
   char * pEnd;
   char * pDigits;
   unsigned NumDigits;
@@ -207,16 +215,31 @@ static void _PrintNumber(RTT_PRINTF_DESC * pDesc,
   unsigned NumPadding;
   unsigned FormatFlags;
   unsigned Precision;
+  unsigned FieldWidth;
+  unsigned Base;
+  char Sign;
 
+  FormatFlags = pFormat->Flags;
+  FieldWidth = pFormat->FieldWidth;
+  Precision = pFormat->Precision;
+#if UINTPTR_MAX > UINT_MAX
   pEnd = Digits + sizeof(Digits);
+#else
+  /* 32位目标最多需要10个十进制字符，复用已读取完毕的12B格式描述符。 */
+  pEnd = (char *)(pFormat + 1);
+#endif
+  Base = ((FormatFlags & FORMAT_FLAG_HEX) != 0u) ? 16u : 10u;
+  if ((FormatFlags & FORMAT_FLAG_NEGATIVE) != 0u) {
+    Sign = '-';
+  } else {
+    Sign = ((FormatFlags & FORMAT_FLAG_PRINT_SIGN) != 0u) ? '+' : '\0';
+  }
   if (Base == 16u) {
     pDigits = _BuildHex(pEnd, Value);
   } else {
     pDigits = _BuildDecimal(pEnd, Value);
   }
   NumDigits = (unsigned)(pEnd - pDigits);
-  FormatFlags = pFormat->Flags;
-  Precision = pFormat->Precision;
   /* UINT_MAX 表示格式串没有指定精度；显式精度会覆盖 '0' 补齐标志。 */
   if (Precision == UINT_MAX) {
     Precision = 0u;
@@ -225,8 +248,7 @@ static void _PrintNumber(RTT_PRINTF_DESC * pDesc,
   }
   NumZeros = (Precision > NumDigits) ? (Precision - NumDigits) : 0u;
   ContentWidth = NumDigits + NumZeros + ((Sign != '\0') ? 1u : 0u);
-  NumPadding = (pFormat->FieldWidth > ContentWidth) ?
-               (pFormat->FieldWidth - ContentWidth) : 0u;
+  NumPadding = (FieldWidth > ContentWidth) ? (FieldWidth - ContentWidth) : 0u;
 
   if ((FormatFlags & FORMAT_FLAG_LEFT_JUSTIFY) != 0u) {
     FormatFlags &= ~FORMAT_FLAG_PAD_ZERO;
@@ -260,22 +282,10 @@ static void _PrintString(RTT_PRINTF_DESC * pDesc, const char * s, unsigned Preci
   _StoreSpan(pDesc, s, Length);
 }
 
-int RTT_vprintfFramed(unsigned BufferIndex,
-                      const char * pPrefix,
-                      const char * sFormat,
-                      va_list * pParamList,
-                      const char * pSuffix) {
-  RTT_PRINTF_DESC Desc;
-
-  Desc.BufferIndex = BufferIndex;
-  Desc.Count = 0u;
-  Desc.Used = 0u;
-  Desc.Error = 0;
-
-  /* 三段内容共用 Desc，长消息会自动多次刷新，但总字符数连续累计。 */
-  _PrintString(&Desc, pPrefix, UINT_MAX);
-
-  while ((*sFormat != '\0') && (Desc.Error == 0)) {
+static RTT_PRINTF_NO_JUMP_TABLE void _FormatBody(RTT_PRINTF_DESC * pDesc,
+                                                 const char * sFormat,
+                                                 va_list * pParamList) {
+  while ((*sFormat != '\0') && (pDesc->Count < RTT_PRINTF_ERROR_COUNT)) {
     const char * pLiteral;
     const char * pConversion;
     RTT_FORMAT_DESC Format;
@@ -286,8 +296,8 @@ int RTT_vprintfFramed(unsigned BufferIndex,
     while ((*sFormat != '\0') && (*sFormat != '%')) {
       sFormat++;
     }
-    _StoreSpan(&Desc, pLiteral, (unsigned)(sFormat - pLiteral));
-    if ((*sFormat == '\0') || (Desc.Error != 0)) {
+    _StoreSpan(pDesc, pLiteral, (unsigned)(sFormat - pLiteral));
+    if ((*sFormat == '\0') || (pDesc->Count >= RTT_PRINTF_ERROR_COUNT)) {
       break;
     }
 
@@ -328,7 +338,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
 
     Specifier = *sFormat;
     if (Specifier == '\0') {
-      _StoreSpan(&Desc, pConversion, (unsigned)(sFormat - pConversion));
+      _StoreSpan(pDesc, pConversion, (unsigned)(sFormat - pConversion));
       break;
     }
     sFormat++;
@@ -342,36 +352,35 @@ int RTT_vprintfFramed(unsigned BufferIndex,
       char Value;
 
       Value = (char)va_arg(*pParamList, int);
-      _StoreChar(&Desc, Value);
+      _StoreChar(pDesc, Value);
       break;
     }
     case 'd': {
       int Value;
       unsigned Magnitude;
-      char Sign;
 
       Value = va_arg(*pParamList, int);
       if (Value < 0) {
         /* 先转无符号再求补码绝对值，可安全处理 INT_MIN。 */
         Magnitude = 0u - (unsigned)Value;
-        Sign = '-';
+        Format.Flags |= FORMAT_FLAG_NEGATIVE;
       } else {
         Magnitude = (unsigned)Value;
-        Sign = ((Format.Flags & FORMAT_FLAG_PRINT_SIGN) != 0u) ? '+' : '\0';
+        Format.Flags &= ~FORMAT_FLAG_NEGATIVE;
       }
-      _PrintNumber(&Desc, (uintptr_t)Magnitude, 10u, Sign, &Format);
+      _PrintNumber(pDesc, (uintptr_t)Magnitude, &Format);
       break;
     }
     case 'u':
-      Format.Flags &= ~FORMAT_FLAG_PRINT_SIGN;
-      _PrintNumber(&Desc, (uintptr_t)va_arg(*pParamList, unsigned int),
-                   10u, '\0', &Format);
+      Format.Flags &= ~(FORMAT_FLAG_PRINT_SIGN | FORMAT_FLAG_NEGATIVE |
+                        FORMAT_FLAG_HEX);
+      _PrintNumber(pDesc, (uintptr_t)va_arg(*pParamList, unsigned int), &Format);
       break;
     case 'x':
     case 'X':
-      Format.Flags &= ~FORMAT_FLAG_PRINT_SIGN;
-      _PrintNumber(&Desc, (uintptr_t)va_arg(*pParamList, unsigned int),
-                   16u, '\0', &Format);
+      Format.Flags &= ~(FORMAT_FLAG_PRINT_SIGN | FORMAT_FLAG_NEGATIVE);
+      Format.Flags |= FORMAT_FLAG_HEX;
+      _PrintNumber(pDesc, (uintptr_t)va_arg(*pParamList, unsigned int), &Format);
       break;
     case 's': {
       const char * s;
@@ -381,7 +390,7 @@ int RTT_vprintfFramed(unsigned BufferIndex,
         s = "(NULL)";
         Format.Precision = UINT_MAX;
       }
-      _PrintString(&Desc, s, Format.Precision);
+      _PrintString(pDesc, s, Format.Precision);
       break;
     }
     case 'p': {
@@ -391,38 +400,69 @@ int RTT_vprintfFramed(unsigned BufferIndex,
       Value = (uintptr_t)va_arg(*pParamList, void *);
       /* 指针固定输出为无 0x 前缀、按架构位宽补零的大写十六进制。 */
       PointerDigits = (unsigned)(sizeof(uintptr_t) * 2u);
-      Format.Flags = 0u;
+      Format.Flags = FORMAT_FLAG_HEX;
       Format.FieldWidth = PointerDigits;
       Format.Precision = PointerDigits;
-      _PrintNumber(&Desc, Value, 16u, '\0', &Format);
+      _PrintNumber(pDesc, Value, &Format);
       break;
     }
     case '%':
-      _StoreChar(&Desc, '%');
+      _StoreChar(pDesc, '%');
       break;
     default:
-      _StoreSpan(&Desc, pConversion, (unsigned)(sFormat - pConversion));
+      _StoreSpan(pDesc, pConversion, (unsigned)(sFormat - pConversion));
       break;
     }
   }
 
-  /* 仅在正文完整时追加后缀，避免写失败后继续产生残缺日志。 */
-  if (Desc.Error == 0) {
-    _PrintString(&Desc, pSuffix, UINT_MAX);
+}
+
+static void _InitDesc(RTT_PRINTF_DESC * pDesc, unsigned BufferIndex) {
+  pDesc->BufferIndex = BufferIndex;
+  pDesc->Count = 0u;
+  pDesc->Used = 0u;
+}
+
+static int _FinishDesc(RTT_PRINTF_DESC * pDesc) {
+  if (pDesc->Count < RTT_PRINTF_ERROR_COUNT) {
+    _Flush(pDesc);
   }
-  if (Desc.Error == 0) {
-    _Flush(&Desc);
-  }
-  if (Desc.Error == 0) {
-    if (Desc.Count <= (unsigned)INT_MAX) {
-      return (int)Desc.Count;
-    }
+  if (pDesc->Count <= (unsigned)INT_MAX) {
+    return (int)pDesc->Count;
   }
   return -1;
 }
 
+int RTT_vprintfFramed(unsigned BufferIndex,
+                      const char * pPrefix,
+                      const char * sFormat,
+                      va_list * pParamList,
+                      const char * pSuffix) {
+  RTT_PRINTF_DESC Desc;
+
+  _InitDesc(&Desc, BufferIndex);
+  /* 三段内容共用 Desc，长消息会自动多次刷新，但总字符数连续累计。 */
+  _PrintString(&Desc, pPrefix, UINT_MAX);
+  _FormatBody(&Desc, sFormat, pParamList);
+  /* 仅在正文完整时追加后缀，避免写失败后继续产生残缺日志。 */
+  if (Desc.Count < RTT_PRINTF_ERROR_COUNT) {
+    _PrintString(&Desc, pSuffix, UINT_MAX);
+  }
+  return _FinishDesc(&Desc);
+}
+
+static int _RTT_vprintfRaw(unsigned BufferIndex,
+                           const char * sFormat,
+                           va_list * pParamList) {
+  RTT_PRINTF_DESC Desc;
+
+  _InitDesc(&Desc, BufferIndex);
+  _FormatBody(&Desc, sFormat, pParamList);
+  return _FinishDesc(&Desc);
+}
+
 int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pParamList) {
-  return RTT_vprintfFramed(BufferIndex, "", sFormat, pParamList, "");
+  return _RTT_vprintfRaw(BufferIndex, sFormat, pParamList);
 }
 
 int SEGGER_RTT_printf(unsigned BufferIndex, const char * sFormat, ...) {
