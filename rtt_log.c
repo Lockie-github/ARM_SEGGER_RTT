@@ -74,6 +74,21 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...) {
   return Result;
 }
 
+int RTT_LogString(const char * pText) {
+#if LOG_ENABLE_STRING
+  unsigned Length;
+
+  if (pText == NULL) {
+    return -1;
+  }
+  Length = SEGGER_RTT_WriteString(RTT_LOG_BUFFER_INDEX, pText);
+  return (int)Length;
+#else
+  (void)pText;
+  return 0;
+#endif
+}
+
 #else
 
 /*
@@ -83,6 +98,11 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...) {
 int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...) {
   (void)Level;
   (void)pFormat;
+  return 0;
+}
+
+int RTT_LogString(const char * pText) {
+  (void)pText;
   return 0;
 }
 

@@ -44,7 +44,8 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 2. `LOG_ENABLE_LITE` 是轻量模式开关。设置为 `1` 时，已启用的日志只
    输出正文和换行，不输出颜色及等级前缀。建议在资源紧张的MCU配置此选项
 3. `LOG_ENABLE_INFO`、`LOG_ENABLE_DEBUG`、`LOG_ENABLE_WARN`、
-   `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT` 和 `LOG_ENABLE_FLOAT` 分别控制
+   `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT`、`LOG_ENABLE_STRING` 和
+   `LOG_ENABLE_FLOAT` 分别控制
    各类日志，在完整模式和轻量模式下都独立生效。
 
 默认配置为开启总开关、关闭轻量模式，并开启所有单项日志。默认使用
@@ -139,13 +140,27 @@ add_subdirectory(ARM_SEGGER_RTT)
 
 应用代码包含 `rtt_log.h` 后，推荐使用以下日志宏：
 
+日志 API 按用途分为两类。`log_info`、`log_debug`、`log_warn`、`log_err` 和浮点
+日志面向不同的日志语义和功能场景，会根据 API 类型提供等级前缀、颜色或浮点
+专用格式，适合需要明确表达日志类别、便于人工阅读和问题定位的场景。
+
+`log_print` 是无等级、无前缀、无颜色的格式化输出接口。在需要传递格式化参数
+且对运行效率要求最高时，推荐使用它替代 `log_info`、`log_debug` 或 `log_err`。
+由于省略了等级日志的附加处理，它是需要格式化参数的日志 API 中运行效率最高的
+接口；代价是调用方必须自行管理换行，也不会获得等级、颜色和前缀信息。
+
+如果不需要格式化参数，只需要输出已有字符串，应优先使用 `log_string`，它不经过
+格式化处理，路径更短。`log_print` 和 `log_string` 都适合性能敏感路径，但不适合
+替代需要等级信息的诊断日志。
+
 | API | 用途 | 完整模式输出 | 配置开关 |
 |---|---|---|---|
 | `log_info(Format, ...)` | 一般运行信息 | 亮绿色 `[INFO] ` + 正文 + 换行 | `LOG_ENABLE_INFO` |
 | `log_debug(Format, ...)` | 调试信息 | 亮蓝色 `[DEBUG] ` + 正文 + 换行 | `LOG_ENABLE_DEBUG` |
 | `log_warn(Format, ...)` | 警告信息 | 亮黄色 `[WARN] ` + 正文 + 换行 | `LOG_ENABLE_WARN` |
 | `log_err(Format, ...)` | 错误信息 | 亮红色 `[ERROR] ` + 正文 + 换行 | `LOG_ENABLE_ERROR` |
-| `log_print(Format, ...)` | 无等级的普通文本 | 无颜色，正文 + 换行 | `LOG_ENABLE_PRINT` |
+| `log_print(Format, ...)` | 无等级的普通文本 | 原样格式化输出，不自动换行 | `LOG_ENABLE_PRINT` |
+| `log_string(Text)` | 原样输出字符串 | 不格式化，不自动换行 | `LOG_ENABLE_STRING` |
 | `log_float(Value)` | 输出单精度浮点数 | 无颜色，数值 + 换行 | `LOG_ENABLE_FLOAT` |
 | `log_float_label(Label, Value)` | 输出带标签的单精度浮点数 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_FLOAT` |
 
@@ -153,7 +168,12 @@ add_subdirectory(ARM_SEGGER_RTT)
 
 - 表中的颜色仅在完整模式且 `RTT_LOG_USE_COLOR=1` 时生效。
 - `LOG_ENABLE_LITE=1` 时，等级日志不输出颜色和等级前缀，只输出正文。
-- 所有日志宏都会自动追加换行，格式字符串中通常不需要再写 `\n`。
+- `log_info/debug/warn/err` 和浮点日志会自动追加换行。
+- `log_string(Text)` 不格式化、不追加换行；需要换行时由调用方显式传入 `\n`。
+- 关闭 `LOG_ENABLE_STRING` 后，`log_string` 不执行 RTT 写入并返回 0，调用参数
+  也不会被求值。
+- `log_print(Format, ...)` 直接格式化输出，不自动追加换行；需要换行时必须在
+  格式字符串中显式写入 `\n`。
 - 各 API 的配置开关相互独立；关闭后，对应宏的参数也不会被求值。
 
 ### 使用示例
@@ -165,7 +185,8 @@ log_info("system ready");
 log_debug("counter=%u", 42u);
 log_warn("voltage=%u mV", 3250u);
 log_err("status=%d", -1);
-log_print("plain text");
+log_print("plain text\n");
+log_string("raw text\n");
 log_float(1.25f);
 log_float_label("temperature", -2.5f);
 ```
@@ -253,6 +274,12 @@ RTT_LogFloat3(1.25f, "voltage");
 | 动态字段宽度 | `*`，例如 `%*d` |
 | 长度修饰符 | `h`、`l`、`ll`、`z` 等 |
 | 浮点转换符 | `%f`、`%e`、`%g` 等 |
+
+官方 RTT 对部分长度修饰符的处理主要停留在格式串解析层面：解析器会跳过
+`h`、`l` 等字符，但底层数值格式化仍按固定的基础整数类型处理，并未完整
+实现对应的类型宽度，尤其不能视为对 `long long` 的真正支持。精简格式化器
+因此不保留这类仅具表面兼容性的解析逻辑，以避免增加固件代码体积，同时使
+实际支持范围与实现能力保持一致。
 
 浮点值应使用 `log_float(Value)` 或 `log_float_label(Label, Value)`。
 

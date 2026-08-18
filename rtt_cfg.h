@@ -21,6 +21,7 @@
 // #define LOG_ENABLE_WARN      1     ///< 1：启用 log_warn；0：移除警告级日志及其参数求值。
 // #define LOG_ENABLE_ERROR     1     ///< 1：启用 log_err；0：移除错误级日志及其参数求值。
 // #define LOG_ENABLE_PRINT     1     ///< 1：启用无级别前缀的 log_print；0：移除该接口调用。
+// #define LOG_ENABLE_STRING    1     ///< 1：启用 log_string；0：移除字符串 RTT 写入实现。
 // #define LOG_ENABLE_FLOAT     1     ///< 1：启用 log_float/log_float_label；0：移除浮点日志代码。
 
 /* 浮点转换实现选择。 */

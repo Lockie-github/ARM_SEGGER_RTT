@@ -9,7 +9,7 @@
  * 日志配置分为三层：
  * 1. RTT_LOG_ENABLE 控制整个日志模块；
  * 2. LOG_ENABLE_LITE 控制是否省略级别前缀和终端颜色；
- * 3. LOG_ENABLE_xxx 分别控制各级别及浮点日志。
+ * 3. LOG_ENABLE_xxx 分别控制各级别、字符串及浮点日志。
  *
  * 应用可在自己的 rtt_cfg.h 或编译选项中预先定义这些宏。这里仅提供
  * 默认值，因而无需修改本文件即可裁剪不需要的日志代码。
@@ -31,6 +31,9 @@
 #endif
 #ifndef LOG_ENABLE_PRINT
   #define LOG_ENABLE_PRINT 1
+#endif
+#ifndef LOG_ENABLE_STRING
+  #define LOG_ENABLE_STRING 1
 #endif
 #ifndef LOG_ENABLE_FLOAT
   #define LOG_ENABLE_FLOAT 1
@@ -88,6 +91,14 @@ extern "C" {
 int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
   RTT_LOG_FORMAT_ATTRIBUTE(2, 3);
 
+/**
+ * @brief Internal implementation for the log_string macro.
+ *
+ * A NULL pointer is rejected with -1. Applications should use log_string()
+ * instead of calling this implementation directly.
+ */
+int RTT_LogString(const char * pText);
+
 #undef RTT_LOG_FORMAT_ATTRIBUTE
 
 #ifdef __cplusplus
@@ -144,7 +155,7 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
   #endif
 
   #if LOG_ENABLE_PRINT
-    #define log_print(...) do { (void)RTT_LogPrintf(RTT_LOG_LEVEL_PRINT, __VA_ARGS__); } while (0)
+    #define log_print(...) do { (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, __VA_ARGS__); } while (0)
   #else
     #define log_print(...) do {} while (0)
   #endif
@@ -155,6 +166,12 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
   #define log_warn(...)  do {} while (0)
   #define log_err(...)   do {} while (0)
   #define log_print(...) do {} while (0)
+#endif
+
+#if RTT_LOG_ENABLE && LOG_ENABLE_STRING
+  #define log_string(Text) (RTT_LogString((Text)))
+#else
+  #define log_string(Text) (0)
 #endif
 
 /*

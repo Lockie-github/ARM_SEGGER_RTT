@@ -11,14 +11,16 @@
 - [1.0.1](#101)
 - [1.0.0](#100)
 
-## 未发布 - 2026-08-12
+## 未发布 - 2026-08-17
 
 ### Added
 
 - 新增日志总开关、轻量模式和各日志接口的分层配置
 - 新增项目级 `rtt_cfg.h` 配置覆盖，以及 CMake/Make 自定义配置目录
+- CMake/Make 集成改为编译精简版 `rtt_printf.c`、`rtt_log.c` 和 `rtt_float.c`，不再将原始 `RTT/SEGGER_RTT_printf.c` 加入 RTT 库目标
 - 新增 `RTT_LogPrintf`、`RTT_LogFloat3`、标签在前的
   `log_float_label(Label, Value)`、可配置输出通道和 ANSI 颜色开关
+- 新增 `log_string(Text)` 原样字符串输出接口
 - 新增 RTT C 源的可配置 `-Os` 优化选项
 
 ### Changed
@@ -37,7 +39,11 @@
   CPU 占用和不可预测延迟，并避免部分写入后重试造成重复输出
 - 不支持的格式转换现在按原文本输出且不消费参数；不再兼容 `#` 标志及
   `h`、`l` 等长度修饰符，`%p` 改为按目标指针位宽输出
+- CMake/Make 的配置目录优先于 RTT 库目录搜索 `rtt_cfg.h`，应用工程配置可覆盖库默认配置；修改配置后需清理并重新编译 RTT 对象
 - Make 集成补充大写 `.S` 汇编源规则，修复全新构建缺少 RTT 汇编对象的问题
+- `log_print(Format, ...)` 改为直接调用 `SEGGER_RTT_printf`，作为需要格式化参数时
+  的高效率日志接口；该接口不自动换行，调用方必须在格式串中显式写入 `\n`
+- 新增 `LOG_ENABLE_STRING`，可独立裁剪 `log_string` 的 RTT 写入实现
 
 ### Removed
 
