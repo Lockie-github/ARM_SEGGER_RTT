@@ -2,7 +2,7 @@
 
 ## 目录
 
-- [未发布 - 2026-08-12](#未发布---2026-08-12)
+- [未发布](#未发布)
 - [2.1.0 - 2026-07-30](#210---2026-07-30)
 - [2.0.2 - 2026-07-01](#202---2026-07-01)
 - [2.0.1 - 2026-04-07](#201---2026-04-07)
@@ -11,16 +11,16 @@
 - [1.0.1](#101)
 - [1.0.0](#100)
 
-## 未发布 - 2026-08-17
+## 未发布
 
 ### Added
 
 - 新增日志总开关、轻量模式和各日志接口的分层配置
-- 新增项目级 `rtt_cfg.h` 配置覆盖，以及 CMake/Make 自定义配置目录
-- CMake/Make 集成改为编译精简版 `rtt_printf.c`、`rtt_log.c` 和 `rtt_float.c`，不再将原始 `RTT/SEGGER_RTT_printf.c` 加入 RTT 库目标
-- 新增 `RTT_LogPrintf`、`RTT_LogFloat3`、标签在前的
-  `log_float_label(Label, Value)`、可配置输出通道和 ANSI 颜色开关
-- 新增 `log_string(Text)` 原样字符串输出接口
+- 新增项目级 `rtt_cfg.h` 配置覆盖；CMake/Make 优先使用应用工程配置目录，
+  修改配置后需清理并重新编译 RTT 对象
+- 新增标签在前的 `log_float_label(Label, Value)`、可配置输出通道和 ANSI 颜色开关
+- 新增可独立裁剪的 `log_string(Text)` 原样字符串输出接口及
+  `LOG_ENABLE_STRING` 开关
 - 新增 RTT C 源的可配置 `-Os` 优化选项
 
 ### Changed
@@ -39,18 +39,21 @@
   CPU 占用和不可预测延迟，并避免部分写入后重试造成重复输出
 - 不支持的格式转换现在按原文本输出且不消费参数；不再兼容 `#` 标志及
   `h`、`l` 等长度修饰符，`%p` 改为按目标指针位宽输出
-- CMake/Make 的配置目录优先于 RTT 库目录搜索 `rtt_cfg.h`，应用工程配置可覆盖库默认配置；修改配置后需清理并重新编译 RTT 对象
+- CMake/Make 集成改为编译精简版 `rtt_printf.c`、`rtt_log.c` 和
+  `rtt_float.c`，不再将原始 `RTT/SEGGER_RTT_printf.c` 加入 RTT 库目标
 - Make 集成补充大写 `.S` 汇编源规则，修复全新构建缺少 RTT 汇编对象的问题
 - `log_print(Format, ...)` 改为直接调用 `SEGGER_RTT_printf`，作为需要格式化参数时
   的高效率日志接口；该接口不自动换行，调用方必须在格式串中显式写入 `\n`
-- 新增 `LOG_ENABLE_STRING`，可独立裁剪 `log_string` 的 RTT 写入实现
+- 拆分无前后缀的 raw formatter 与分级日志 framed formatter，降低
+  `log_print` 的调用周期和动态栈；格式输出、返回值、长消息分块及 RTT 短写
+  语义保持不变。该优化不增加静态 RAM；相较优化前的精简格式化器，代价是
+  小幅增加 Flash，并可能增加普通等级日志非数字格式路径的动态栈
 
 ### Removed
 
 - 移除 `log_float_desc(Description, Value)`；使用参数顺序相同的
   `log_float_label(Label, Value)` 替代
 - 移除内部浮点宏头文件 `rtt_core.h`；浮点转换改由 `rtt_float.c` 实现
-- 不再编译 `RTT/SEGGER_RTT_printf.c`，改用仓库根目录的精简实现 `rtt_printf.c`
 
 ## [2.1.0] - 2026-07-30
 

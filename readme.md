@@ -3,6 +3,8 @@
 - [描述](#描述)
 - [移植](#移植)
 - [日志配置](#日志配置)
+  - [推荐配置](#推荐配置)
+  - [自定义配置](#自定义配置)
 - [API](#api)
   - [API 介绍](#api-介绍)
     - [输出规则](#输出规则)
@@ -37,20 +39,61 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 
 # 日志配置
 
-日志配置分为三级：
+日志功能由以下配置项控制：
 
 1. `RTT_LOG_ENABLE` 是总开关。设置为 `0` 时所有 `log_*` 宏均不输出，
    且宏参数不会被求值。可在发布固件中配置为 `0`
-2. `LOG_ENABLE_LITE` 是轻量模式开关。设置为 `1` 时，已启用的日志只
-   输出正文和换行，不输出颜色及等级前缀。建议在资源紧张的MCU配置此选项
+2. `LOG_ENABLE_LITE` 是等级日志的轻量模式开关。设置为 `1` 时，
+   `log_info`、`log_debug`、`log_warn` 和 `log_err` 只输出正文和换行，
+   不输出颜色及等级前缀；该开关不影响 `log_print`、`log_string` 和浮点日志。
 3. `LOG_ENABLE_INFO`、`LOG_ENABLE_DEBUG`、`LOG_ENABLE_WARN`、
    `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT`、`LOG_ENABLE_STRING` 和
-   `LOG_ENABLE_FLOAT` 分别控制
-   各类日志，在完整模式和轻量模式下都独立生效。
+   `LOG_ENABLE_FLOAT` 分别控制各类日志，在完整模式和轻量模式下都独立生效。
 
-默认配置为开启总开关、关闭轻量模式，并开启所有单项日志。默认使用
-RTT Up Buffer 0 并启用 ANSI 颜色。`HARD_FPU_ENABLE` 默认为 `0`；仅当目标
-和编译选项均启用硬件 FPU 时，才应在应用的 `rtt_cfg.h` 中将其设置为 `1`。
+工程默认开启 `RTT_LOG_ENABLE`、关闭 `LOG_ENABLE_LITE`，并开启所有单项日志。
+日志默认写入 RTT Up Buffer 0，完整模式下启用 ANSI 颜色。
+`HARD_FPU_ENABLE` 默认为 `0`，浮点日志使用不依赖浮点运行库的 IEEE-754 位解析
+实现。设置为 `1` 后改用 `modff` 实现；仅建议在目标和编译选项均启用硬件 FPU
+时使用，GCC 工程通常还需链接 `libm`（`-lm`）。否则应保持为 `0`，以避免引入
+软件浮点及数学库开销。
+
+## 推荐配置
+
+可以根据资源和输出需求选择以下配置方案：
+
+| 配置方案 | 关键配置 | 行为和适用场景 |
+|---|---|---|
+| 完整日志 | `LOG_ENABLE_LITE=0`，所有单项日志开启 | 保留等级、颜色和全部日志 API，适合常规调试 |
+| Lite 等级日志 | `LOG_ENABLE_LITE=1`，所有单项日志开启 | 等级日志只输出正文和换行，API 使用方式不变 |
+| 极致精简模式 | 关闭等级及浮点日志，只开启 `LOG_ENABLE_PRINT` 和 `LOG_ENABLE_STRING` | 在保留格式化和字符串输出能力的前提下，以运行效率和 Flash 占用为最高优先级 |
+
+资源极其紧张时，推荐使用极致精简模式：格式化内容使用 `log_print`，已有字符串
+使用路径更短的 `log_string`。
+
+```c
+#define RTT_LOG_ENABLE    1
+
+#define LOG_ENABLE_INFO   0
+#define LOG_ENABLE_DEBUG  0
+#define LOG_ENABLE_WARN   0
+#define LOG_ENABLE_ERROR  0
+#define LOG_ENABLE_FLOAT  0
+
+#define LOG_ENABLE_PRINT  1
+#define LOG_ENABLE_STRING 1
+```
+
+该配置不使用等级日志，因此 `LOG_ENABLE_LITE` 设置为 `0` 或 `1` 均不影响输出。
+如果完全不需要格式化，可进一步只开启 `LOG_ENABLE_STRING`；如果只需要格式化，
+则只开启 `LOG_ENABLE_PRINT`。
+
+## 自定义配置
+
+以上默认值由各模块内置，无需修改 `rtt_cfg.h` 即可生效。如果希望修改配置，
+需要在应用工程中启用 `rtt_cfg.h` 的自定义配置块：
+
+- `RTT_USER_CFG_ENABLE=0`：自定义配置块不生效，继续使用各模块的内置默认值。
+- `RTT_USER_CFG_ENABLE=1`：自定义配置块生效，块内配置覆盖各模块的内置默认值。
 
 使用 submodule 集成时，推荐把配置模板复制到主工程根目录：
 
@@ -58,9 +101,12 @@ RTT Up Buffer 0 并启用 ANSI 颜色。`HARD_FPU_ENABLE` 默认为 `0`；仅当
 cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 ```
 
-然后在主工程的 `rtt_cfg.h` 中取消所需配置项的注释并修改。例如：
+复制后，将主工程 `rtt_cfg.h` 中的 `RTT_USER_CFG_ENABLE` 设置为 `1`，再修改
+需要调整的配置。例如：
 
 ```c
+#define RTT_USER_CFG_ENABLE 1
+
 #define RTT_LOG_ENABLE       1
 #define LOG_ENABLE_LITE      1
 #define LOG_ENABLE_DEBUG     0
@@ -131,8 +177,9 @@ add_subdirectory(ARM_SEGGER_RTT)
 选项和 RTT 专用选项时，以编译命令中靠后的 RTT 专用选项为准。
 
 应用源码与 `rtt_log.c` 必须使用同一个配置目录，仓库提供的 CMake 和 Make
-集成已经保证这一点。若使用命令行 `-D` 临时配置，请不要在项目级
-`rtt_cfg.h` 中重复定义同一个宏。
+集成已经保证这一点。若使用命令行 `-D` 临时配置，应保持
+`RTT_USER_CFG_ENABLE=0`；启用自定义配置块后，请不要再通过命令行重复定义块内
+的同名宏。
 
 # API
 
@@ -140,41 +187,34 @@ add_subdirectory(ARM_SEGGER_RTT)
 
 应用代码包含 `rtt_log.h` 后，推荐使用以下日志宏：
 
-日志 API 按用途分为两类。`log_info`、`log_debug`、`log_warn`、`log_err` 和浮点
-日志面向不同的日志语义和功能场景，会根据 API 类型提供等级前缀、颜色或浮点
-专用格式，适合需要明确表达日志类别、便于人工阅读和问题定位的场景。
-
-`log_print` 是无等级、无前缀、无颜色的格式化输出接口。在需要传递格式化参数
-且对运行效率要求最高时，推荐使用它替代 `log_info`、`log_debug` 或 `log_err`。
-由于省略了等级日志的附加处理，它是需要格式化参数的日志 API 中运行效率最高的
-接口；代价是调用方必须自行管理换行，也不会获得等级、颜色和前缀信息。
-
-如果不需要格式化参数，只需要输出已有字符串，应优先使用 `log_string`，它不经过
-格式化处理，路径更短。`log_print` 和 `log_string` 都适合性能敏感路径，但不适合
-替代需要等级信息的诊断日志。
-
-| API | 用途 | 完整模式输出 | 配置开关 |
+| API | 定位 | 完整模式输出 | 配置开关 |
 |---|---|---|---|
+| `log_string(Text)` | 纯字符串的最短输出路径 | 原样字符串，不格式化、不自动换行 | `LOG_ENABLE_STRING` |
+| `log_print(Format, ...)` | 格式化日志的极致精简路径 | 原样格式化输出，不自动换行 | `LOG_ENABLE_PRINT` |
 | `log_info(Format, ...)` | 一般运行信息 | 亮绿色 `[INFO] ` + 正文 + 换行 | `LOG_ENABLE_INFO` |
 | `log_debug(Format, ...)` | 调试信息 | 亮蓝色 `[DEBUG] ` + 正文 + 换行 | `LOG_ENABLE_DEBUG` |
 | `log_warn(Format, ...)` | 警告信息 | 亮黄色 `[WARN] ` + 正文 + 换行 | `LOG_ENABLE_WARN` |
 | `log_err(Format, ...)` | 错误信息 | 亮红色 `[ERROR] ` + 正文 + 换行 | `LOG_ENABLE_ERROR` |
-| `log_print(Format, ...)` | 无等级的普通文本 | 原样格式化输出，不自动换行 | `LOG_ENABLE_PRINT` |
-| `log_string(Text)` | 原样输出字符串 | 不格式化，不自动换行 | `LOG_ENABLE_STRING` |
-| `log_float(Value)` | 输出单精度浮点数 | 无颜色，数值 + 换行 | `LOG_ENABLE_FLOAT` |
-| `log_float_label(Label, Value)` | 输出带标签的单精度浮点数 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_FLOAT` |
+| `log_float(Value)` | 无标签浮点数 | 无颜色，数值 + 换行 | `LOG_ENABLE_FLOAT` |
+| `log_float_label(Label, Value)` | 带标签浮点数 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_FLOAT` |
+
+资源极其紧张时，`log_string` 和 `log_print` 构成极致精简输出路径：
+- `log_string` 不进入格式化器，直接输出已有字符串，是无需格式化时运行路径最短、
+  Flash 附加占用最低的选择。
+- `log_print` 直接调用 RTT 格式化器，不经过日志等级、颜色、前缀和自动换行处理，
+  是仍需格式化参数时兼顾运行效率与 Flash 占用的极致精简选择。
+
+两者分别覆盖纯字符串和格式化输出。只启用 `LOG_ENABLE_STRING` 与
+`LOG_ENABLE_PRINT`，并关闭等级及浮点日志，即为前文所述的极致精简模式。需要
+日志等级和颜色时使用普通日志，需要固定三位小数输出时使用浮点日志。
+
 
 ### 输出规则
 
 - 表中的颜色仅在完整模式且 `RTT_LOG_USE_COLOR=1` 时生效。
 - `LOG_ENABLE_LITE=1` 时，等级日志不输出颜色和等级前缀，只输出正文。
-- `log_info/debug/warn/err` 和浮点日志会自动追加换行。
-- `log_string(Text)` 不格式化、不追加换行；需要换行时由调用方显式传入 `\n`。
-- 关闭 `LOG_ENABLE_STRING` 后，`log_string` 不执行 RTT 写入并返回 0，调用参数
-  也不会被求值。
-- `log_print(Format, ...)` 直接格式化输出，不自动追加换行；需要换行时必须在
-  格式字符串中显式写入 `\n`。
 - 各 API 的配置开关相互独立；关闭后，对应宏的参数也不会被求值。
+- 关闭 `LOG_ENABLE_STRING` 后，`log_string` 返回 0。
 
 ### 使用示例
 
@@ -199,6 +239,7 @@ log_float_label("temperature", -2.5f);
 [WARN] voltage=3250 mV
 [ERROR] status=-1
 plain text
+raw text
 1.250
 temperature: -2.500
 ```
@@ -207,8 +248,6 @@ temperature: -2.500
 
 | 项目 | 说明 |
 |---|---|
-| `log_float(Value)` | 只输出数值 |
-| `log_float_label(Label, Value)` | 先输出字符串标签，再输出数值 |
 | `Label` | 类型为 `const char *`；传入 `NULL` 等同于 `log_float(Value)` |
 | 数值精度 | 参数转换为 `float`，固定输出三位小数 |
 | 舍入方式 | 直接截断，不四舍五入；`1.9996f` 输出 `1.999` |
@@ -295,6 +334,7 @@ RTT_LogFloat3(1.25f, "voltage");
 # 修订记录
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
+|2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并修正 `HARD_FPU_ENABLE` 使用说明||
 |2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
 |1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
 |1.0.1|2026/04/07|修改了移植描述，[位于移植/Make/2.](port.md#make)||
