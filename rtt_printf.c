@@ -208,7 +208,7 @@ static void _PrintNumber(RTT_PRINTF_DESC * pDesc,
   char Digits[(sizeof(uintptr_t) * 2u) + 2u];
 #endif
   char * pEnd;
-  char * pDigits;
+  const char * pDigits;
   unsigned NumDigits;
   unsigned NumZeros;
   unsigned ContentWidth;
@@ -319,11 +319,10 @@ static RTT_PRINTF_NO_JUMP_TABLE void _FormatBody(RTT_PRINTF_DESC * pDesc,
     Format.FieldWidth = _ParseUnsigned(&sFormat);
     Format.Precision = UINT_MAX;
     if (*sFormat == '.') {
-      int DynamicPrecision;
-
       sFormat++;
       Format.Precision = 0u;
       if (*sFormat == '*') {
+        int DynamicPrecision;
         sFormat++;
         DynamicPrecision = va_arg(*pParamList, int);
         if (DynamicPrecision < 0) {

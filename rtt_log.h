@@ -51,6 +51,11 @@
   #define RTT_LOG_USE_COLOR 1
 #endif
 
+#if RTT_LOG_ENABLE && \
+    (RTT_LOG_BUFFER_INDEX >= SEGGER_RTT_MAX_NUM_UP_BUFFERS)
+  #error "RTT_LOG_BUFFER_INDEX must be less than SEGGER_RTT_MAX_NUM_UP_BUFFERS"
+#endif
+
 /* 关闭日志或浮点日志后，不再引入浮点格式化接口。 */
 #if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
   #include "rtt_float.h"

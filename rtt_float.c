@@ -74,6 +74,9 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   IntegerPartAbs = (uint32_t)IntegerPart;
   /* 固定三位小数采用截断语义，与无 FPU 路径保持一致。 */
   DecimalPart = (unsigned)(Fraction * 1000.0f);
+  if ((IntegerPartAbs == 0u) && (DecimalPart == 0u)) {
+    Negative = 0u;
+  }
 
   _LogFloatParts(sDescription, Negative, IntegerPartAbs, DecimalPart);
 }
@@ -95,7 +98,6 @@ static void _FloatToParts(float Value,
   } Bits;
   uint32_t Exponent;
   uint32_t Mantissa;
-  uint32_t FractionBits;
   int Shift;
 
   Bits.f = Value;
@@ -139,6 +141,7 @@ static void _FloatToParts(float Value,
       }
       return;
     }
+    uint32_t FractionBits;
     *pIntegerPart = Mantissa >> FractionShift;
     FractionBits = Mantissa & ((1u << FractionShift) - 1u);
     /* FractionBits * 125 不溢出 uint32_t，同时避免 Cortex-M0 的除法辅助函数。 */
