@@ -11,6 +11,14 @@
   #define HARD_FPU_ENABLE 0
 #endif
 
+/*
+ * 正常有限浮点数默认直接组装完整帧并单次写入 RTT，避免通用格式化器。
+ * 设为 0 可减少 Flash 占用，但会恢复 SEGGER_RTT_printf 格式化路径。
+ */
+#ifndef RTT_LOG_FLOAT_FAST_PATH
+  #define RTT_LOG_FLOAT_FAST_PATH 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

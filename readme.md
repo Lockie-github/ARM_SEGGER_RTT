@@ -57,6 +57,12 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 时使用，GCC 工程通常还需链接 `libm`（`-lm`）。否则应保持为 `0`，以避免引入
 软件浮点及数学库开销。
 
+`RTT_LOG_FLOAT_FAST_PATH` 默认为 `1`。正常有限浮点数会在栈上组装完整日志帧，
+并单次调用 `SEGGER_RTT_Write()`，以避免通用格式化器并保持 Skip 模式下整帧接受或
+整帧丢弃的行为。设为 `0` 后恢复 `SEGGER_RTT_printf()` 格式化路径，可减少约 140B
+Flash，但 `log_float` 和 `log_float_label` 的常规有限数输出会变慢。NaN、Inf、溢出
+以及超过 47B 的标签始终使用兼容格式化路径。
+
 ## 推荐配置
 
 可以根据资源和输出需求选择以下配置方案：
@@ -111,6 +117,7 @@ cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 #define LOG_ENABLE_LITE      1
 #define LOG_ENABLE_DEBUG     0
 #define HARD_FPU_ENABLE      1
+#define RTT_LOG_FLOAT_FAST_PATH 1
 #define RTT_LOG_BUFFER_INDEX 0
 #define RTT_LOG_USE_COLOR    0
 
@@ -253,6 +260,7 @@ temperature: -2.500
 | 舍入方式 | 直接截断，不四舍五入；`1.9996f` 输出 `1.999` |
 | 特殊值 | 输出 `NaN`、`Inf`、`-Inf`、`Overflow` 或 `-Overflow` |
 | 可表示范围 | 绝对值必须小于 `2^32`，否则输出溢出提示 |
+| 直写优化 | `RTT_LOG_FLOAT_FAST_PATH=1` 时，常规有限值且标签不超过 47B 时单次 RTT 写入；设为 `0` 可节省约 140B Flash |
 
 默认使用不依赖 `modff` 或软浮点除法的 IEEE-754 binary32 解析路径。
 设置 `HARD_FPU_ENABLE=1` 后改用 `modff`；GCC 工程最终链接时通常需要 `-lm`。
@@ -334,6 +342,7 @@ RTT_LogFloat3(1.25f, "voltage");
 # 修订记录
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
+|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关，说明浮点直写性能与 Flash 取舍||
 |2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并修正 `HARD_FPU_ENABLE` 使用说明||
 |2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
 |1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||

@@ -24,12 +24,81 @@ static void _LogFloatText(const char * sDescription, const char * sText) {
   }
 }
 
+#if RTT_LOG_FLOAT_FAST_PATH
+
+#define RTT_FLOAT_DIRECT_BUFFER_SIZE (64u)
+
+/*
+ * The usual finite-value path has a fixed maximum payload of 15 bytes, or
+ * 17 bytes plus the label.  Bypass the generic formatter when that complete
+ * frame fits in a small local buffer so skip mode can accept or reject it as
+ * one RTT write.  Long labels retain the existing unbounded formatter path.
+ */
+static unsigned _TryLogFloatPartsDirect(const char * sDescription,
+                                        unsigned Negative,
+                                        uint32_t IntegerPart,
+                                        unsigned DecimalPart) {
+  char Buffer[RTT_FLOAT_DIRECT_BUFFER_SIZE];
+  char * pCurrent;
+  char * pDigits;
+  char * pLeft;
+  char * pRight;
+
+  pCurrent = Buffer;
+  if (sDescription != NULL) {
+    while (*sDescription != '\0') {
+      /* ": ", sign, ten integer digits, decimal point, three decimals and LF. */
+      if ((unsigned)(pCurrent - Buffer) >=
+          (RTT_FLOAT_DIRECT_BUFFER_SIZE - 17u)) {
+        return 0u;
+      }
+      *pCurrent++ = *sDescription++;
+    }
+    *pCurrent++ = ':';
+    *pCurrent++ = ' ';
+  }
+  if (Negative != 0u) {
+    *pCurrent++ = '-';
+  }
+
+  pDigits = pCurrent;
+  do {
+    *pCurrent++ = (char)('0' + (IntegerPart % 10u));
+    IntegerPart /= 10u;
+  } while (IntegerPart != 0u);
+  pLeft = pDigits;
+  pRight = pCurrent - 1;
+  while (pLeft < pRight) {
+    char Temp;
+
+    Temp = *pLeft;
+    *pLeft++ = *pRight;
+    *pRight-- = Temp;
+  }
+  *pCurrent++ = '.';
+  *pCurrent++ = (char)('0' + (DecimalPart / 100u));
+  *pCurrent++ = (char)('0' + ((DecimalPart / 10u) % 10u));
+  *pCurrent++ = (char)('0' + (DecimalPart % 10u));
+  *pCurrent++ = '\n';
+  (void)SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX,
+                         Buffer,
+                         (unsigned)(pCurrent - Buffer));
+  return 1u;
+}
+
+#endif
+
 static void _LogFloatParts(const char * sDescription,
                            unsigned Negative,
                            uint32_t IntegerPart,
                            unsigned DecimalPart) {
   const char * sSign;
 
+#if RTT_LOG_FLOAT_FAST_PATH
+  if (_TryLogFloatPartsDirect(sDescription, Negative, IntegerPart, DecimalPart) != 0u) {
+    return;
+  }
+#endif
   sSign = Negative ? "-" : "";
   if (sDescription != NULL) {
     (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s%u.%03u\n",

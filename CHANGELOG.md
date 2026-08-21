@@ -22,6 +22,8 @@
 - 新增可独立裁剪的 `log_string(Text)` 原样字符串输出接口及
   `LOG_ENABLE_STRING` 开关
 - 新增 RTT C 源的可配置 `-Os` 优化选项
+- 新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关，默认以单次 RTT 写入优化常规有限浮点日志；
+  关闭后回退兼容格式化路径以减少 Flash 占用
 
 ### Changed
 
