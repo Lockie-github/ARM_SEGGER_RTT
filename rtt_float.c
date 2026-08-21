@@ -28,6 +28,33 @@ static void _LogFloatText(const char * sDescription, const char * sText) {
 
 #define RTT_FLOAT_DIRECT_BUFFER_SIZE (64u)
 
+#if !defined(__ARM_FEATURE_IDIV)
+
+/*
+ * Divide by ten without using / or %.  The packed return value maps to the
+ * two-register uint64_t return ABI on Arm: quotient in the high word and
+ * remainder in the low word.  This avoids Cortex-M0 division helpers without
+ * adding output-parameter stack slots to the float logging path.
+ */
+static uint64_t _DivMod10(uint32_t Value) {
+  uint32_t Quotient;
+  uint32_t Remainder;
+
+  Quotient = (Value >> 1) + (Value >> 2);
+  Quotient += Quotient >> 4;
+  Quotient += Quotient >> 8;
+  Quotient += Quotient >> 16;
+  Quotient >>= 3;
+  Remainder = Value - (((Quotient << 2) + Quotient) << 1);
+  if (Remainder > 9u) {
+    Remainder -= 10u;
+    Quotient++;
+  }
+  return ((uint64_t)Quotient << 32) | Remainder;
+}
+
+#endif
+
 /*
  * The usual finite-value path has a fixed maximum payload of 15 bytes, or
  * 17 bytes plus the label.  Bypass the generic formatter when that complete
@@ -43,6 +70,11 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
   char * pDigits;
   char * pLeft;
   char * pRight;
+#if !defined(__ARM_FEATURE_IDIV)
+  uint64_t DivResult;
+  unsigned DecimalDigit0;
+  unsigned DecimalDigit1;
+#endif
 
   pCurrent = Buffer;
   if (sDescription != NULL) {
@@ -63,8 +95,14 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
 
   pDigits = pCurrent;
   do {
+#if defined(__ARM_FEATURE_IDIV)
     *pCurrent++ = (char)('0' + (IntegerPart % 10u));
     IntegerPart /= 10u;
+#else
+    DivResult = _DivMod10(IntegerPart);
+    IntegerPart = (uint32_t)(DivResult >> 32);
+    *pCurrent++ = (char)('0' + (unsigned)DivResult);
+#endif
   } while (IntegerPart != 0u);
   pLeft = pDigits;
   pRight = pCurrent - 1;
@@ -76,9 +114,21 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
     *pRight-- = Temp;
   }
   *pCurrent++ = '.';
+#if defined(__ARM_FEATURE_IDIV)
   *pCurrent++ = (char)('0' + (DecimalPart / 100u));
   *pCurrent++ = (char)('0' + ((DecimalPart / 10u) % 10u));
   *pCurrent++ = (char)('0' + (DecimalPart % 10u));
+#else
+  DivResult = _DivMod10(DecimalPart);
+  DecimalPart = (unsigned)(DivResult >> 32);
+  DecimalDigit0 = (unsigned)DivResult;
+  DivResult = _DivMod10(DecimalPart);
+  DecimalPart = (unsigned)(DivResult >> 32);
+  DecimalDigit1 = (unsigned)DivResult;
+  *pCurrent++ = (char)('0' + DecimalPart);
+  *pCurrent++ = (char)('0' + DecimalDigit1);
+  *pCurrent++ = (char)('0' + DecimalDigit0);
+#endif
   *pCurrent++ = '\n';
   (void)SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX,
                          Buffer,
