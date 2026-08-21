@@ -63,6 +63,12 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 Flash，但 `log_float` 和 `log_float_label` 的常规有限数输出会变慢。NaN、Inf、溢出
 以及超过 47B 的标签始终使用兼容格式化路径。
 
+`RTT_USE_ASM` 由 RTT 根据目标内核与编译器自动判定。值为 `1` 时，Up Buffer 的
+`SEGGER_RTT_MODE_NO_BLOCK_SKIP` 写入会使用 ARMv7-M 汇编实现；值为 `0` 时保持 C
+实现，Cortex-M0 等不支持该汇编的目标不会增加 Flash。需要在支持的目标上强制回退 C
+路径时，可为全部 RTT C 和 `.S` 源传入 `-DRTT_USE_ASM=0`，随后清理并重新编译 RTT
+对象；不要只对其中一种源文件定义该宏。
+
 ## 推荐配置
 
 可以根据资源和输出需求选择以下配置方案：
@@ -342,7 +348,7 @@ RTT_LogFloat3(1.25f, "voltage");
 # 修订记录
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
-|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关，说明浮点直写性能与 Flash 取舍||
+|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；说明浮点直写性能与 Flash 取舍，并补充 `RTT_USE_ASM` 的 Skip 写入路径与关闭方式||
 |2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并修正 `HARD_FPU_ENABLE` 使用说明||
 |2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
 |1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||

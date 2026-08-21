@@ -1110,6 +1110,17 @@ unsigned SEGGER_RTT_WriteNoLock(unsigned BufferIndex, const void* pBuffer, unsig
     // If we are in skip mode and there is no space for the whole
     // of this output, don't bother.
     //
+    //
+    // The assembler implementation returns a boolean, whereas this API
+    // returns the number of bytes written. It requires a non-zero length.
+    //
+#if RTT_USE_ASM
+    if (NumBytes == 0u) {
+      Status = 0u;
+    } else {
+      Status = SEGGER_RTT_WriteSkipNoLock(BufferIndex, pBuffer, NumBytes) ? NumBytes : 0u;
+    }
+#else
     Avail = _GetAvailWriteSpace(pRing);
     if (Avail < NumBytes) {
       Status = 0u;
@@ -1117,6 +1128,7 @@ unsigned SEGGER_RTT_WriteNoLock(unsigned BufferIndex, const void* pBuffer, unsig
       Status = NumBytes;
       _WriteNoCheck(pRing, pData, NumBytes);
     }
+#endif
     break;
   case SEGGER_RTT_MODE_NO_BLOCK_TRIM:
     //
