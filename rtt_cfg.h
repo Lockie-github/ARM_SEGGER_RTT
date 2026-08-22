@@ -27,7 +27,7 @@
 
 /* 浮点转换实现选择。 */
 #define HARD_FPU_ENABLE      0     ///< 1：使用 modff 硬件浮点路径；仅在芯片及 ABI 均启用 FPU 时设置。
-#define RTT_LOG_FLOAT_FAST_PATH 1 ///< 1：有限浮点单次 RTT 直写以优先性能；0：关闭直写以减少 Flash。
+#define RTT_LOG_FLOAT_FAST_PATH 0 ///< 1：以额外 Flash 换取有限浮点输出效率；0：使用兼容格式化路径。
 
 /* 日志输出通道及终端显示。 */
 #define RTT_LOG_BUFFER_INDEX 0u    ///< 日志写入的 RTT Up Buffer 索引，默认终端通道为 0。

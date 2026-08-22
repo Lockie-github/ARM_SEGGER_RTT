@@ -57,14 +57,16 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 时使用，GCC 工程通常还需链接 `libm`（`-lm`）。否则应保持为 `0`，以避免引入
 软件浮点及数学库开销。
 
-`RTT_LOG_FLOAT_FAST_PATH` 默认为 `1`。正常有限浮点数会在栈上组装完整日志帧，
-并单次调用 `SEGGER_RTT_Write()`，以避免通用格式化器并保持 Skip 模式下整帧接受或
-整帧丢弃的行为。没有硬件整数除法的目标会自动使用移位加减法拆分十进制数字，避免
-引入 `__aeabi_*div*`；支持 `__ARM_FEATURE_IDIV` 的目标继续使用硬件除法。设为 `0`
-后恢复 `SEGGER_RTT_printf()` 格式化路径，可进一步减少 Flash，但实际差值取决于目标
-内核、工具链及工程是否已经链接整数除法运行库。GCC 12.2、`-Os` 受控构建中，H7B0
-差值为 140B，独立 Cortex-M0 浮点构建在消除除法依赖后差值为 172B。NaN、Inf、溢出
-以及超过 47B 的标签始终使用兼容格式化路径。
+`RTT_LOG_FLOAT_FAST_PATH` 是浮点日志的效率优化开关，默认值为 `0`。开启后，正常
+有限浮点数会在栈上组装完整日志帧并单次调用 `SEGGER_RTT_Write()`，绕过通用格式化器，
+从而缩短格式化及写入路径，同时保持 Skip 模式下整帧接受或整帧丢弃的行为；代价是会
+增加一部分 Flash 占用。没有硬件整数除法的目标会自动使用移位加减法拆分十进制数字，
+避免引入 `__aeabi_*div*`；支持 `__ARM_FEATURE_IDIV` 的目标继续使用硬件除法。
+
+保持为 `0` 时使用 `SEGGER_RTT_printf()` 兼容格式化路径，更适合优先控制固件体积的
+场景。实际 Flash 差值取决于目标内核、工具链及工程是否已经链接整数除法运行库；在
+GCC 12.2、`-Os` 受控构建中，H7B0 开启快速路径会增加 140B，独立 Cortex-M0 浮点
+构建会增加 172B。NaN、Inf、溢出以及超过 47B 的标签始终使用兼容格式化路径。
 
 `RTT_USE_ASM` 由 RTT 根据目标内核与编译器自动判定。值为 `1` 时，Up Buffer 的
 `SEGGER_RTT_MODE_NO_BLOCK_SKIP` 写入会使用 ARMv7-M 汇编实现；值为 `0` 时保持 C
@@ -126,7 +128,7 @@ cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 #define LOG_ENABLE_LITE      1
 #define LOG_ENABLE_DEBUG     0
 #define HARD_FPU_ENABLE      1
-#define RTT_LOG_FLOAT_FAST_PATH 1
+#define RTT_LOG_FLOAT_FAST_PATH 0
 #define RTT_LOG_BUFFER_INDEX 0
 #define RTT_LOG_USE_COLOR    0
 
@@ -269,7 +271,7 @@ temperature: -2.500
 | 舍入方式 | 直接截断，不四舍五入；`1.9996f` 输出 `1.999` |
 | 特殊值 | 输出 `NaN`、`Inf`、`-Inf`、`Overflow` 或 `-Overflow` |
 | 可表示范围 | 绝对值必须小于 `2^32`，否则输出溢出提示 |
-| 直写优化 | `RTT_LOG_FLOAT_FAST_PATH=1` 时，常规有限值且标签不超过 47B 时单次 RTT 写入；设为 `0` 可节省约 140B Flash |
+| 浮点快速路径 | 默认为 `0`；设为 `1` 后，常规有限值且标签不超过 47B 时使用单次 RTT 写入，以增加部分 Flash 为代价提高输出效率 |
 
 默认使用不依赖 `modff` 或软浮点除法的 IEEE-754 binary32 解析路径。
 设置 `HARD_FPU_ENABLE=1` 后改用 `modff`；GCC 工程最终链接时通常需要 `-lm`。

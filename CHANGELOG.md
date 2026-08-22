@@ -22,8 +22,8 @@
 - 新增可独立裁剪的 `log_string(Text)` 原样字符串输出接口及
   `LOG_ENABLE_STRING` 开关
 - 新增 RTT C 源的可配置 `-Os` 优化选项
-- 新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关，默认以单次 RTT 写入优化常规有限浮点日志；
-  关闭后回退兼容格式化路径以减少 Flash 占用
+- 新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；默认使用兼容格式化路径以控制 Flash
+  占用，开启后以额外 Flash 换取常规有限浮点日志的输出效率
 - `RTT_USE_ASM=1` 时，Up Buffer 的 `NO_BLOCK_SKIP` 写入自动使用现有 ARMv7-M 汇编实现；
   `RTT_USE_ASM=0` 保持原有 C 实现
 

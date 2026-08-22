@@ -12,11 +12,11 @@
 #endif
 
 /*
- * 正常有限浮点数默认直接组装完整帧并单次写入 RTT，避免通用格式化器。
- * 设为 0 可减少 Flash 占用，但会恢复 SEGGER_RTT_printf 格式化路径。
+ * 置 1 后，正常有限浮点数会直接组装完整帧并单次写入 RTT，以额外
+ * Flash 占用换取更高的输出效率；默认使用兼容格式化路径。
  */
 #ifndef RTT_LOG_FLOAT_FAST_PATH
-  #define RTT_LOG_FLOAT_FAST_PATH 1
+  #define RTT_LOG_FLOAT_FAST_PATH 0
 #endif
 
 #ifdef __cplusplus
