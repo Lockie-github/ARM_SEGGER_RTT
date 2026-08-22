@@ -15,6 +15,7 @@
     - [格式控制](#格式控制)
     - [不支持的格式](#不支持的格式)
     - [长消息与错误格式](#长消息与错误格式)
+- [对源码的修改](#对源码的修改)
 - [修订记录](#修订记录)
 - [更新记录](#更新记录)
 
@@ -359,10 +360,24 @@ RTT_LogFloat3(1.25f, "voltage");
 - 编译器的 `printf` 格式检查只能发现参数类型问题，不代表本实现支持标准
   `printf` 的全部功能。
 
+# 对源码的修改
+
+此章仅记录相较于SEGGER RTT 8.64a的RTT部分的源码做出的修改,方便以后使用
+
+| 文件与位置 | 修改内容 | 目的 | 引入提交 |
+|---|---|---|---|
+| `RTT/SEGGER_RTT_Conf.h`：配置声明区 | 引入 `rtt_cfg.h`，并将 `RTT_WRITE_SKIP_USE_ASM` 默认设为 `0` | 支持应用工程统一配置 RTT，同时保持默认 C 写入路径不变 | `d497659` 引入配置入口；`cc65eb3` 增加 Skip 汇编开关 |
+| `RTT/SEGGER_RTT.c`：`SEGGER_RTT_WriteNoLock()` 的 `SEGGER_RTT_MODE_NO_BLOCK_SKIP` 分支 | Skip 模式可按配置调用 `SEGGER_RTT_WriteSkipNoLock()` 汇编实现，并转换返回值、处理零长度写入 | 在支持汇编的 Cortex-M 目标上缩短非阻塞写入路径，同时保持 `SEGGER_RTT_WriteNoLock()` 的返回语义 | `2227ae9` 引入汇编路径；`cc65eb3` 增加独立开关 |
+| `RTT/SEGGER_RTT_printf.c`：`_PrintInt()` | 在无符号域计算负数绝对值 | 避免格式化 `INT_MIN` 时发生有符号溢出 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的动态精度解析 | 动态精度先按 `int` 读取，负值视为未指定精度 | 使 `%.*s` 的负精度行为正确 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的转换符解析 | 遇到结尾不完整的转换格式时停止解析 | 避免越过格式字符串结尾读取 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的 `%u`、`%x`、`%X`、`%s` 和 `%p` 分支 | 按正确类型读取无符号数和指针；仅在设置字符串精度时递减计数 | 修正可变参数类型并避免无意义的精度回绕 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的尾部缓冲写入 | 检查最后一批数据是否完整写入，不再重复累加缓冲长度 | 写入失败时返回 `-1`，成功时返回准确字符数 | `2ec88a7` |
+
 # 修订记录
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
-|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；消除 Cortex-M0 快速路径的整数除法运行库依赖；说明浮点直写性能与目标相关的 Flash 取舍，并补充 `RTT_WRITE_SKIP_USE_ASM` 独立分发开关||
+|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；消除 Cortex-M0 快速路径的整数除法运行库依赖；说明浮点直写性能与目标相关的 Flash 取舍，并补充 `RTT_WRITE_SKIP_USE_ASM` 独立分发开关；新增“对源码的修改”章节，按文件、函数或代码分支记录相对 `release` 的 RTT 源码修改、目的及引入提交||
 |2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并修正 `HARD_FPU_ENABLE` 使用说明||
 |2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
 |1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
