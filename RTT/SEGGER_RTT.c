@@ -1114,11 +1114,13 @@ unsigned SEGGER_RTT_WriteNoLock(unsigned BufferIndex, const void* pBuffer, unsig
     // The assembler implementation returns a boolean, whereas this API
     // returns the number of bytes written. It requires a non-zero length.
     //
-#if RTT_USE_ASM
+#if RTT_USE_ASM && RTT_WRITE_SKIP_USE_ASM
     if (NumBytes == 0u) {
       Status = 0u;
     } else {
-      Status = SEGGER_RTT_WriteSkipNoLock(BufferIndex, pBuffer, NumBytes) ? NumBytes : 0u;
+      Status = SEGGER_RTT_WriteSkipNoLock(
+        BufferIndex, pBuffer, NumBytes
+      ) ? NumBytes : 0u;
     }
 #else
     Avail = _GetAvailWriteSpace(pRing);

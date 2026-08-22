@@ -10,6 +10,7 @@
  */
 #define RTT_USER_CFG_ENABLE 0
 #if RTT_USER_CFG_ENABLE
+
 /* 日志模块总开关。 */
 #define RTT_LOG_ENABLE       1     ///< 1：启用全部日志功能；0：关闭日志模块。
 
@@ -28,6 +29,9 @@
 /* 浮点转换实现选择。 */
 #define HARD_FPU_ENABLE      0     ///< 1：使用 modff 硬件浮点路径；仅在芯片及 ABI 均启用 FPU 时设置。
 #define RTT_LOG_FLOAT_FAST_PATH 0 ///< 1：以额外 Flash 换取有限浮点输出效率；0：使用兼容格式化路径。
+
+/* WriteNoLock 的 Skip 模式是否分发至 RTT 汇编实现。 */
+#define RTT_WRITE_SKIP_USE_ASM 0 ///< 1：RTT_USE_ASM 可用时分发至汇编实现；0：保留 C 写入路径。
 
 /* 日志输出通道及终端显示。 */
 #define RTT_LOG_BUFFER_INDEX 0u    ///< 日志写入的 RTT Up Buffer 索引，默认终端通道为 0。
