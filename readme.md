@@ -49,10 +49,13 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
    不输出颜色及等级前缀；该开关不影响 `log_print`、`log_string` 和浮点日志。
 3. `LOG_ENABLE_INFO`、`LOG_ENABLE_DEBUG`、`LOG_ENABLE_WARN`、
    `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT`、`LOG_ENABLE_STRING` 和
-   `LOG_ENABLE_FLOAT` 分别控制各类日志，在完整模式和轻量模式下都独立生效。
+   `LOG_ENABLE_FLOAT` 分别控制既有日志；`LOG_ENABLE_TYPED` 独立控制四个固定类型
+   日志接口。所有单项开关在完整模式和轻量模式下都独立生效。
 
 工程默认开启 `RTT_LOG_ENABLE`、关闭 `LOG_ENABLE_LITE`，并开启所有单项日志。
 日志默认写入 RTT Up Buffer 0，完整模式下启用 ANSI 颜色。
+`LOG_ENABLE_TYPED` 例外地默认关闭，启用后提供绕过通用 formatter 的 `int32_t`、
+`uint32_t`、固定宽度十六进制和指针日志。
 `RTT_FLOAT_USE_MODFF` 默认为 `0`，浮点日志使用不依赖浮点运行库的 IEEE-754
 binary32 位解析实现。当前浮点 API 固定输出三位小数，并以代码体积优先、输出效率
 可选为设计原则；在这一范围内，改用 `modff` 通常不会带来性能或体积收益。该备用
@@ -94,6 +97,7 @@ RTT C 和 `.S` 源传入 `-DRTT_USE_ASM=0`，随后清理并重新编译 RTT 对
 | 完整日志 | `LOG_ENABLE_LITE=0`，所有单项日志开启 | 保留等级、颜色和全部日志 API，适合常规调试 |
 | Lite 等级日志 | `LOG_ENABLE_LITE=1`，所有单项日志开启 | 等级日志只输出正文和换行，API 使用方式不变 |
 | 极致精简模式 | 关闭等级及浮点日志，只开启 `LOG_ENABLE_PRINT` 和 `LOG_ENABLE_STRING` | 在保留格式化和字符串输出能力的前提下，以运行效率和 Flash 占用为最高优先级 |
+| 固定类型模式 | 关闭等级、格式化及浮点日志，只开启 `LOG_ENABLE_TYPED` | 只输出 32 位整数、十六进制和指针，避免链接通用 formatter |
 
 资源极其紧张时，推荐使用极致精简模式：格式化内容使用 `log_print`，已有字符串
 使用路径更短的 `log_string`。
@@ -106,6 +110,7 @@ RTT C 和 `.S` 源传入 `-DRTT_USE_ASM=0`，随后清理并重新编译 RTT 对
 #define LOG_ENABLE_WARN   0
 #define LOG_ENABLE_ERROR  0
 #define LOG_ENABLE_FLOAT  0
+#define LOG_ENABLE_TYPED  0
 
 #define LOG_ENABLE_PRINT  1
 #define LOG_ENABLE_STRING 1
@@ -113,7 +118,8 @@ RTT C 和 `.S` 源传入 `-DRTT_USE_ASM=0`，随后清理并重新编译 RTT 对
 
 该配置不使用等级日志，因此 `LOG_ENABLE_LITE` 设置为 `0` 或 `1` 均不影响输出。
 如果完全不需要格式化，可进一步只开启 `LOG_ENABLE_STRING`；如果只需要格式化，
-则只开启 `LOG_ENABLE_PRINT`。
+则只开启 `LOG_ENABLE_PRINT`。如果业务日志仅包含四种固定类型，可关闭
+`LOG_ENABLE_PRINT` 并开启 `LOG_ENABLE_TYPED`，从最终固件中裁掉 formatter。
 
 ## 自定义配置
 
@@ -226,6 +232,10 @@ add_subdirectory(ARM_SEGGER_RTT)
 | `log_err(Format, ...)` | 错误信息 | 亮红色 `[ERROR] ` + 正文 + 换行 | `LOG_ENABLE_ERROR` |
 | `log_float(Value)` | 无标签浮点数 | 无颜色，数值 + 换行 | `LOG_ENABLE_FLOAT` |
 | `log_float_label(Label, Value)` | 带标签浮点数 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_FLOAT` |
+| `log_i32(Label, Value)` | 32 位有符号十进制 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_TYPED` |
+| `log_u32(Label, Value)` | 32 位无符号十进制 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_TYPED` |
+| `log_hex32(Label, Value)` | 8 位大写十六进制 | 无颜色，`Label: 0x1234ABCD` + 换行 | `LOG_ENABLE_TYPED` |
+| `log_pointer(Label, Value)` | 指针宽度的大写十六进制 | 无颜色，`Label: 0x20000000` + 换行 | `LOG_ENABLE_TYPED` |
 
 资源极其紧张时，`log_string` 和 `log_print` 构成极致精简输出路径：
 - `log_string` 不进入格式化器，直接输出已有字符串，是无需格式化时运行路径最短、
@@ -256,6 +266,10 @@ log_warn("voltage=%u mV", 3250u);
 log_err("status=%d", -1);
 log_print("plain text\n");
 log_string("raw text\n");
+log_i32("offset", -12);
+log_u32(NULL, 4294967295u);
+log_hex32("status", 0x89ABCDEFu);
+log_pointer("buffer", Buffer);
 log_float(1.25f);
 log_float_label("temperature", -2.5f);
 ```
@@ -269,9 +283,27 @@ log_float_label("temperature", -2.5f);
 [ERROR] status=-1
 plain text
 raw text
+offset: -12
+4294967295
+status: 0x89ABCDEF
+buffer: 0x20000000
 1.250
 temperature: -2.500
 ```
+
+### 专用类型日志
+
+`log_i32`、`log_u32`、`log_hex32` 和 `log_pointer` 不解析格式串，不添加等级、
+颜色或 ANSI 控制序列，并固定追加一个换行。`Label` 为 `NULL` 或空字符串时只输出
+数值；非空标签与数值间固定使用 `": "`。`LOG_ENABLE_LITE` 和
+`RTT_LOG_USE_COLOR` 不改变这些接口的输出。
+
+十进制转换使用移位和乘法，不调用整数除法；十六进制固定使用大写字符。
+短日志在 64 B 栈缓冲区中组装后一次写入 RTT，超长标签按标签、分隔符和数值分段
+写入，不截断且不使用堆内存。以 GCC 12.2.1、Cortex-M0、`-Os` 和
+`-fstack-usage` 测得，四个接口自身的最深静态调用链为 128 B，不包含底层
+`SEGGER_RTT_Write()` 的栈占用。关闭 `LOG_ENABLE_TYPED` 或 `RTT_LOG_ENABLE` 后，
+四个宏不会求值参数，相关实现也会在预处理阶段移除。
 
 ### 浮点日志
 
@@ -300,6 +332,7 @@ int Count;
 
 Count = RTT_LogPrintf(RTT_LOG_LEVEL_INFO, "state=%u", 3u);
 Count = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "raw=%u", 3u);
+Count = RTT_LogI32("offset", -12);
 RTT_LogFloat3(1.25f, "voltage");
 ```
 
@@ -307,6 +340,7 @@ RTT_LogFloat3(1.25f, "voltage");
 |---|---|---|
 | `RTT_LogPrintf(Level, Format, ...)` | 添加等级前缀和换行；`RTT_LOG_LEVEL_PRINT` 不添加等级前缀 | 成功时返回字符数；写入失败返回 `-1`；模块关闭返回 `0` |
 | `SEGGER_RTT_printf(BufferIndex, Format, ...)` | 写入指定 Up Buffer，不添加前缀、颜色或换行 | 成功时返回字符数；写入失败返回 `-1` |
+| `RTT_LogI32`、`RTT_LogU32`、`RTT_LogHex32`、`RTT_LogPointer` | 写入固定格式类型日志和换行 | 成功时返回实际字节数；短写或长度溢出返回 `-1` |
 | `RTT_LogFloat3(Value, Description)` | `Description` 非空时输出 `Description: Value`，否则只输出数值 | 无返回值 |
 
 ## 格式化支持

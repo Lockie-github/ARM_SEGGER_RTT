@@ -5,6 +5,8 @@
 
 #include "SEGGER_RTT.h"
 
+#include <stdint.h>
+
 /*
  * 日志配置分为三层：
  * 1. RTT_LOG_ENABLE 控制整个日志模块；
@@ -37,6 +39,9 @@
 #endif
 #ifndef LOG_ENABLE_FLOAT
   #define LOG_ENABLE_FLOAT 1
+#endif
+#ifndef LOG_ENABLE_TYPED
+  #define LOG_ENABLE_TYPED 0
 #endif
 #ifndef LOG_ENABLE_LITE
   #define LOG_ENABLE_LITE  0
@@ -103,6 +108,20 @@ int RTT_LogPrintf(RTT_LOG_LEVEL Level, const char * pFormat, ...)
  * instead of calling this implementation directly.
  */
 int RTT_LogString(const char * pText);
+
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
+/** @brief Write a labeled signed 32-bit decimal value and a newline. */
+int RTT_LogI32(const char * pLabel, int32_t Value);
+
+/** @brief Write a labeled unsigned 32-bit decimal value and a newline. */
+int RTT_LogU32(const char * pLabel, uint32_t Value);
+
+/** @brief Write a labeled, fixed-width uppercase hexadecimal value. */
+int RTT_LogHex32(const char * pLabel, uint32_t Value);
+
+/** @brief Write a labeled pointer using the target's full pointer width. */
+int RTT_LogPointer(const char * pLabel, const void * pValue);
+#endif
 
 #undef RTT_LOG_FORMAT_ATTRIBUTE
 
@@ -177,6 +196,26 @@ int RTT_LogString(const char * pText);
   #define log_string(Text) (RTT_LogString((Text)))
 #else
   #define log_string(Text) (0)
+#endif
+
+/*
+ * Fixed-format typed logging bypasses the general formatter. Each call adds
+ * one newline; a NULL or empty label writes only the value.
+ */
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
+  #define log_i32(Label, Value) \
+    do { (void)RTT_LogI32((Label), (int32_t)(Value)); } while (0)
+  #define log_u32(Label, Value) \
+    do { (void)RTT_LogU32((Label), (uint32_t)(Value)); } while (0)
+  #define log_hex32(Label, Value) \
+    do { (void)RTT_LogHex32((Label), (uint32_t)(Value)); } while (0)
+  #define log_pointer(Label, Value) \
+    do { (void)RTT_LogPointer((Label), (const void *)(Value)); } while (0)
+#else
+  #define log_i32(Label, Value) do {} while (0)
+  #define log_u32(Label, Value) do {} while (0)
+  #define log_hex32(Label, Value) do {} while (0)
+  #define log_pointer(Label, Value) do {} while (0)
 #endif
 
 /*

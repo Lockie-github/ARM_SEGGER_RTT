@@ -3,6 +3,10 @@
 
 #include <stdarg.h>
 
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
+  #include <limits.h>
+#endif
+
 #if RTT_LOG_ENABLE
 
 /*
@@ -88,6 +92,186 @@ int RTT_LogString(const char * pText) {
   return 0;
 #endif
 }
+
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
+
+#define RTT_TYPED_LOG_FRAME_SIZE    64u
+#define RTT_TYPED_I32_VALUE_SIZE    12u
+#define RTT_TYPED_U32_VALUE_SIZE    11u
+#define RTT_TYPED_HEX32_VALUE_SIZE  11u
+#define RTT_TYPED_POINTER_SIZE      ((sizeof(uintptr_t) * 2u) + 3u)
+#define RTT_TYPED_LOG_ERROR         (-1)
+
+static uint32_t rtt_typed_divide_u32_by_10(uint32_t Value,
+                                            unsigned * pRemainder) {
+  uint32_t Quotient;
+
+  Quotient = (Value >> 1) + (Value >> 2);
+  Quotient += Quotient >> 4;
+  Quotient += Quotient >> 8;
+  Quotient += Quotient >> 16;
+  Quotient >>= 3;
+  Quotient += ((Value - (Quotient * 10u)) + 6u) >> 4;
+  *pRemainder = (unsigned)(Value - (Quotient * 10u));
+  return Quotient;
+}
+
+static unsigned rtt_typed_build_u32_digits(char * pBuffer, uint32_t Value) {
+  unsigned End = 0u;
+  unsigned Left;
+  unsigned Right;
+
+  do {
+    unsigned Digit;
+
+    Value = rtt_typed_divide_u32_by_10(Value, &Digit);
+    pBuffer[End++] = (char)('0' + Digit);
+  } while (Value != 0u);
+
+  Left = 0u;
+  Right = End - 1u;
+  while (Left < Right) {
+    char Temporary = pBuffer[Left];
+
+    pBuffer[Left++] = pBuffer[Right];
+    pBuffer[Right--] = Temporary;
+  }
+  return End;
+}
+
+static unsigned rtt_typed_build_i32(char * pBuffer, int32_t Value) {
+  uint32_t Magnitude;
+  unsigned Length = 0u;
+
+  if (Value < 0) {
+    pBuffer[Length++] = '-';
+    Magnitude = 0u - (uint32_t)Value;
+  } else {
+    Magnitude = (uint32_t)Value;
+  }
+  Length += rtt_typed_build_u32_digits(pBuffer + Length, Magnitude);
+  pBuffer[Length++] = '\n';
+  return Length;
+}
+
+static unsigned rtt_typed_build_u32(char * pBuffer, uint32_t Value) {
+  unsigned Length = rtt_typed_build_u32_digits(pBuffer, Value);
+
+  pBuffer[Length++] = '\n';
+  return Length;
+}
+
+static unsigned rtt_typed_build_hex(char * pBuffer,
+                                    uintptr_t Value,
+                                    unsigned NumDigits) {
+  static const char HexDigits[] = "0123456789ABCDEF";
+  unsigned Index;
+
+  pBuffer[0] = '0';
+  pBuffer[1] = 'x';
+  for (Index = NumDigits; Index != 0u; --Index) {
+    pBuffer[Index + 1u] = HexDigits[Value & 0x0Fu];
+    Value >>= 4;
+  }
+  pBuffer[NumDigits + 2u] = '\n';
+  return NumDigits + 3u;
+}
+
+static int rtt_typed_write_exact(const char * pData, unsigned Length) {
+  if (SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX, pData, Length) != Length) {
+    return RTT_TYPED_LOG_ERROR;
+  }
+  return (int)Length;
+}
+
+static int rtt_typed_write_frame(const char * pLabel,
+                                 const char * pValue,
+                                 unsigned ValueLength) {
+  char Frame[RTT_TYPED_LOG_FRAME_SIZE];
+  unsigned LabelLength = 0u;
+  unsigned TotalLength;
+  unsigned Index;
+
+  if ((pLabel != NULL) && (*pLabel != '\0')) {
+    while (pLabel[LabelLength] != '\0') {
+      if (LabelLength == (unsigned)INT_MAX) {
+        return RTT_TYPED_LOG_ERROR;
+      }
+      ++LabelLength;
+    }
+  }
+
+  if (LabelLength > ((unsigned)INT_MAX - ValueLength - 2u)) {
+    return RTT_TYPED_LOG_ERROR;
+  }
+  TotalLength = LabelLength + ValueLength;
+  if (LabelLength != 0u) {
+    TotalLength += 2u;
+  }
+
+  if (TotalLength <= sizeof(Frame)) {
+    Index = 0u;
+    if (LabelLength != 0u) {
+      unsigned LabelIndex;
+
+      for (LabelIndex = 0u; LabelIndex < LabelLength; ++LabelIndex) {
+        Frame[Index++] = pLabel[LabelIndex];
+      }
+      Frame[Index++] = ':';
+      Frame[Index++] = ' ';
+    }
+    while (Index < TotalLength) {
+      Frame[Index] = pValue[Index - LabelLength -
+                            ((LabelLength != 0u) ? 2u : 0u)];
+      ++Index;
+    }
+    return rtt_typed_write_exact(Frame, TotalLength);
+  }
+
+  if (rtt_typed_write_exact(pLabel, LabelLength) < 0) {
+    return RTT_TYPED_LOG_ERROR;
+  }
+  if (rtt_typed_write_exact(": ", 2u) < 0) {
+    return RTT_TYPED_LOG_ERROR;
+  }
+  if (rtt_typed_write_exact(pValue, ValueLength) < 0) {
+    return RTT_TYPED_LOG_ERROR;
+  }
+  return (int)TotalLength;
+}
+
+int RTT_LogI32(const char * pLabel, int32_t Value) {
+  char ValueText[RTT_TYPED_I32_VALUE_SIZE];
+  unsigned ValueLength = rtt_typed_build_i32(ValueText, Value);
+
+  return rtt_typed_write_frame(pLabel, ValueText, ValueLength);
+}
+
+int RTT_LogU32(const char * pLabel, uint32_t Value) {
+  char ValueText[RTT_TYPED_U32_VALUE_SIZE];
+  unsigned ValueLength = rtt_typed_build_u32(ValueText, Value);
+
+  return rtt_typed_write_frame(pLabel, ValueText, ValueLength);
+}
+
+int RTT_LogHex32(const char * pLabel, uint32_t Value) {
+  char ValueText[RTT_TYPED_HEX32_VALUE_SIZE];
+  unsigned ValueLength = rtt_typed_build_hex(ValueText, (uintptr_t)Value, 8u);
+
+  return rtt_typed_write_frame(pLabel, ValueText, ValueLength);
+}
+
+int RTT_LogPointer(const char * pLabel, const void * pValue) {
+  char ValueText[RTT_TYPED_POINTER_SIZE];
+  unsigned ValueLength =
+    rtt_typed_build_hex(ValueText,
+                        (uintptr_t)pValue,
+                        (unsigned)(sizeof(uintptr_t) * 2u));
+
+  return rtt_typed_write_frame(pLabel, ValueText, ValueLength);
+}
+
+#endif
 
 #else
 
