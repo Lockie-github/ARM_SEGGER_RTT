@@ -53,10 +53,11 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
 
 工程默认开启 `RTT_LOG_ENABLE`、关闭 `LOG_ENABLE_LITE`，并开启所有单项日志。
 日志默认写入 RTT Up Buffer 0，完整模式下启用 ANSI 颜色。
-`HARD_FPU_ENABLE` 默认为 `0`，浮点日志使用不依赖浮点运行库的 IEEE-754 位解析
-实现。设置为 `1` 后改用 `modff` 实现；仅建议在目标和编译选项均启用硬件 FPU
-时使用，GCC 工程通常还需链接 `libm`（`-lm`）。否则应保持为 `0`，以避免引入
-软件浮点及数学库开销。
+`RTT_FLOAT_USE_MODFF` 默认为 `0`，浮点日志使用不依赖浮点运行库的 IEEE-754
+binary32 位解析实现。当前浮点 API 固定输出三位小数，并以代码体积优先、输出效率
+可选为设计原则；在这一范围内，改用 `modff` 通常不会带来性能或体积收益。该备用
+实现仍予保留，以支持未来可能增加的动态小数位数接口，以及非 IEEE-754 平台或更
+通用的浮点格式化需求。设为 `1` 时 GCC 工程通常还需链接 `libm`（`-lm`）。
 
 `RTT_LOG_FLOAT_FAST_PATH` 是浮点日志的效率优化开关，默认值为 `0`。开启后，正常
 有限浮点数会在栈上组装完整日志帧并单次调用 `SEGGER_RTT_Write()`，绕过通用格式化器，
@@ -137,7 +138,7 @@ cp ARM_SEGGER_RTT/rtt_cfg.h ./rtt_cfg.h
 #define RTT_LOG_ENABLE       1
 #define LOG_ENABLE_LITE      1
 #define LOG_ENABLE_DEBUG     0
-#define HARD_FPU_ENABLE      1
+#define RTT_FLOAT_USE_MODFF  0
 #define RTT_LOG_FLOAT_FAST_PATH 0
 #define RTT_LOG_BUFFER_INDEX 0
 #define RTT_LOG_USE_COLOR    0
@@ -283,8 +284,11 @@ temperature: -2.500
 | 可表示范围 | 绝对值必须小于 `2^32`，否则输出溢出提示 |
 | 浮点快速路径 | 默认为 `0`；设为 `1` 后，常规有限值且标签不超过 47B 时使用单次 RTT 写入，以增加部分 Flash 为代价提高输出效率 |
 
-默认使用不依赖 `modff` 或软浮点除法的 IEEE-754 binary32 解析路径。
-设置 `HARD_FPU_ENABLE=1` 后改用 `modff`；GCC 工程最终链接时通常需要 `-lm`。
+默认使用不依赖 `modff` 或软浮点除法的 IEEE-754 binary32 解析路径。当前 API
+固定输出三位小数，且 SEGGER RTT 原生 `SEGGER_RTT_printf` 不支持 `%f`、`%e`、
+`%g` 等浮点转换，因此 `RTT_FLOAT_USE_MODFF` 不是性能开关，也不会为现有接口增加
+动态精度能力。它作为未来动态小数位数接口、非 IEEE-754 平台或更通用浮点格式化的
+备用实现保留；设为 `1` 后改用 `modff`，GCC 工程最终链接时通常需要 `-lm`。
 
 ### 底层接口
 
@@ -378,7 +382,7 @@ RTT_LogFloat3(1.25f, "voltage");
 | 文档版本 | 修订时间 | 修改内容 | 备注 |
 |--|--|--|--|
 |2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；消除 Cortex-M0 快速路径的整数除法运行库依赖；说明浮点直写性能与目标相关的 Flash 取舍，并补充 `RTT_WRITE_SKIP_USE_ASM` 独立分发开关；新增“对源码的修改”章节，按文件、函数或代码分支记录相对 `release` 的 RTT 源码修改、目的及引入提交||
-|2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并修正 `HARD_FPU_ENABLE` 使用说明||
+|2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并完善浮点转换配置说明||
 |2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
 |1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
 |1.0.1|2026/04/07|修改了移植描述，[位于移植/Make/2.](port.md#make)||

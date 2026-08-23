@@ -3,12 +3,17 @@
 
 #include <rtt_cfg.h>
 
+#ifdef HARD_FPU_ENABLE
+  #error "HARD_FPU_ENABLE was renamed to RTT_FLOAT_USE_MODFF"
+#endif
+
 /*
- * 置 1 后允许使用 modff 拆分浮点数，适用于目标芯片和编译选项均启用
- * 硬件 FPU 的工程；否则使用不依赖浮点运行库的 IEEE-754 位解析路径。
+ * 当前固定三位小数接口默认使用紧凑的 IEEE-754 binary32 位解析实现。
+ * modff 路径不作为性能优化，仅为未来的动态小数位数接口、非 IEEE-754
+ * 平台或更通用的浮点格式化需求保留。
  */
-#ifndef HARD_FPU_ENABLE
-  #define HARD_FPU_ENABLE 0
+#ifndef RTT_FLOAT_USE_MODFF
+  #define RTT_FLOAT_USE_MODFF 0
 #endif
 
 /*

@@ -27,7 +27,7 @@
 #define LOG_ENABLE_FLOAT     1     ///< 1：启用 log_float/log_float_label；0：移除浮点日志代码。
 
 /* 浮点转换实现选择。 */
-#define HARD_FPU_ENABLE      0     ///< 1：使用 modff 硬件浮点路径；仅在芯片及 ABI 均启用 FPU 时设置。
+#define RTT_FLOAT_USE_MODFF  0     ///< 1：使用 modff 备用实现；0：使用固定三位小数的 IEEE-754 位解析实现。
 #define RTT_LOG_FLOAT_FAST_PATH 0 ///< 1：以额外 Flash 换取有限浮点输出效率；0：使用兼容格式化路径。
 
 /* WriteNoLock 的 Skip 模式是否分发至 RTT 汇编实现。 */

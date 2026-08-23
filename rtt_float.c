@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT && HARD_FPU_ENABLE
+#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT && RTT_FLOAT_USE_MODFF
   #include <math.h>
 #endif
 
@@ -159,9 +159,9 @@ static void _LogFloatParts(const char * sDescription,
   }
 }
 
-#if HARD_FPU_ENABLE
+#if RTT_FLOAT_USE_MODFF
 
-/* 硬件 FPU 路径直接使用 modff，代码简单，但会依赖目标的浮点运行库。 */
+/* 备用路径使用 modff，代码更通用，但会依赖目标的浮点运行库。 */
 void RTT_LogFloat3(float Value, const char * sDescription) {
   float IntegerPart;
   float Fraction;
