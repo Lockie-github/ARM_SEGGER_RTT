@@ -26,6 +26,8 @@
   占用，开启后以额外 Flash 换取常规有限浮点日志的输出效率
 - 新增 `RTT_WRITE_SKIP_USE_ASM` 独立分发开关；默认保留 Up Buffer `NO_BLOCK_SKIP`
   的 C 写入路径，仅在该开关与 `RTT_USE_ASM` 同时启用时使用 ARMv7-M 汇编实现
+- 新增 `LOG_ENABLE_TYPED_FLOAT` 独立开关及 `log_f32(Label, Value)`；固定三位小数，
+  标签最多输出前 46 B，整帧通过一次非格式化 RTT 写入提交
 
 ### Changed
 

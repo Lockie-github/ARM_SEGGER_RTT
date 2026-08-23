@@ -43,6 +43,9 @@
 #ifndef LOG_ENABLE_TYPED
   #define LOG_ENABLE_TYPED 0
 #endif
+#ifndef LOG_ENABLE_TYPED_FLOAT
+  #define LOG_ENABLE_TYPED_FLOAT 0
+#endif
 #ifndef LOG_ENABLE_LITE
   #define LOG_ENABLE_LITE  0
 #endif
@@ -61,8 +64,8 @@
   #error "RTT_LOG_BUFFER_INDEX must be less than SEGGER_RTT_MAX_NUM_UP_BUFFERS"
 #endif
 
-/* 关闭日志或浮点日志后，不再引入浮点格式化接口。 */
-#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+/* 关闭全部浮点日志后，不再引入浮点转换接口。 */
+#if RTT_LOG_ENABLE && (LOG_ENABLE_FLOAT || LOG_ENABLE_TYPED_FLOAT)
   #include "rtt_float.h"
 #endif
 
@@ -217,6 +220,14 @@ int RTT_LogPointer(const char * pLabel, const void * pValue);
   #define log_u32(Label, Value) do {} while (0)
   #define log_hex32(Label, Value) do {} while (0)
   #define log_pointer(Label, Value) do {} while (0)
+#endif
+
+/* float typed 日志固定三位小数，并遵循 typed 标签的 46 B 上限。 */
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED_FLOAT
+  #define log_f32(Label, Value) \
+    do { (void)RTT_LogF32((Label), (float)(Value)); } while (0)
+#else
+  #define log_f32(Label, Value) do {} while (0)
 #endif
 
 /*

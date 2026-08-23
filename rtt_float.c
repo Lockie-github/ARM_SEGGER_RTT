@@ -5,7 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT && RTT_FLOAT_USE_MODFF
+#if RTT_LOG_ENABLE && (LOG_ENABLE_FLOAT || LOG_ENABLE_TYPED_FLOAT) && \
+    RTT_FLOAT_USE_MODFF
   #include <math.h>
 #endif
 
@@ -14,8 +15,9 @@
 #define RTT_FLOAT_SPECIAL_INFINITY (2u)
 #define RTT_FLOAT_SPECIAL_OVERFLOW (3u)
 
-#if RTT_LOG_ENABLE && LOG_ENABLE_FLOAT
+#if RTT_LOG_ENABLE && (LOG_ENABLE_FLOAT || LOG_ENABLE_TYPED_FLOAT)
 
+#if LOG_ENABLE_FLOAT
 static void _LogFloatText(const char * sDescription, const char * sText) {
   if (sDescription != NULL) {
     (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %s\n", sDescription, sText);
@@ -23,8 +25,9 @@ static void _LogFloatText(const char * sDescription, const char * sText) {
     (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s\n", sText);
   }
 }
+#endif
 
-#if RTT_LOG_FLOAT_FAST_PATH
+#if (LOG_ENABLE_FLOAT && RTT_LOG_FLOAT_FAST_PATH) || LOG_ENABLE_TYPED_FLOAT
 
 #define RTT_FLOAT_DIRECT_BUFFER_SIZE (64u)
 
@@ -55,18 +58,12 @@ static uint64_t _DivMod10(uint32_t Value) {
 
 #endif
 
-/*
- * The usual finite-value path has a fixed maximum payload of 15 bytes, or
- * 17 bytes plus the label.  Bypass the generic formatter when that complete
- * frame fits in a small local buffer so skip mode can accept or reject it as
- * one RTT write.  Long labels retain the existing unbounded formatter path.
- */
-static unsigned _TryLogFloatPartsDirect(const char * sDescription,
-                                        unsigned Negative,
-                                        uint32_t IntegerPart,
-                                        unsigned DecimalPart) {
-  char Buffer[RTT_FLOAT_DIRECT_BUFFER_SIZE];
-  char * pCurrent;
+#if LOG_ENABLE_TYPED_FLOAT
+
+static char * _AppendTypedFloatParts(char * pCurrent,
+                                     unsigned Negative,
+                                     uint32_t IntegerPart,
+                                     unsigned DecimalPart) {
   char * pDigits;
   char * pLeft;
   char * pRight;
@@ -76,19 +73,6 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
   unsigned DecimalDigit1;
 #endif
 
-  pCurrent = Buffer;
-  if (sDescription != NULL) {
-    while (*sDescription != '\0') {
-      /* ": ", sign, ten integer digits, decimal point, three decimals and LF. */
-      if ((unsigned)(pCurrent - Buffer) >=
-          (RTT_FLOAT_DIRECT_BUFFER_SIZE - 17u)) {
-        return 0u;
-      }
-      *pCurrent++ = *sDescription++;
-    }
-    *pCurrent++ = ':';
-    *pCurrent++ = ' ';
-  }
   if (Negative != 0u) {
     *pCurrent++ = '-';
   }
@@ -110,6 +94,83 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
     char Temp;
 
     Temp = *pLeft;
+    *pLeft++ = *pRight;
+    *pRight-- = Temp;
+  }
+  *pCurrent++ = '.';
+#if defined(__ARM_FEATURE_IDIV)
+  *pCurrent++ = (char)('0' + (DecimalPart / 100u));
+  *pCurrent++ = (char)('0' + ((DecimalPart / 10u) % 10u));
+  *pCurrent++ = (char)('0' + (DecimalPart % 10u));
+#else
+  DivResult = _DivMod10(DecimalPart);
+  DecimalPart = (unsigned)(DivResult >> 32);
+  DecimalDigit0 = (unsigned)DivResult;
+  DivResult = _DivMod10(DecimalPart);
+  DecimalPart = (unsigned)(DivResult >> 32);
+  DecimalDigit1 = (unsigned)DivResult;
+  *pCurrent++ = (char)('0' + DecimalPart);
+  *pCurrent++ = (char)('0' + DecimalDigit1);
+  *pCurrent++ = (char)('0' + DecimalDigit0);
+#endif
+  *pCurrent++ = '\n';
+  return pCurrent;
+}
+
+#endif
+
+#endif
+
+#if LOG_ENABLE_FLOAT
+
+#if RTT_LOG_FLOAT_FAST_PATH
+
+/* 有限值完整帧能够放入 64 B 缓冲区时绕过 formatter。 */
+static unsigned _TryLogFloatPartsDirect(const char * sDescription,
+                                        unsigned Negative,
+                                        uint32_t IntegerPart,
+                                        unsigned DecimalPart) {
+  char Buffer[RTT_FLOAT_DIRECT_BUFFER_SIZE];
+  char * pCurrent = Buffer;
+  char * pDigits;
+  char * pLeft;
+  char * pRight;
+#if !defined(__ARM_FEATURE_IDIV)
+  uint64_t DivResult;
+  unsigned DecimalDigit0;
+  unsigned DecimalDigit1;
+#endif
+
+  if (sDescription != NULL) {
+    while (*sDescription != '\0') {
+      if ((unsigned)(pCurrent - Buffer) >=
+          (RTT_FLOAT_DIRECT_BUFFER_SIZE - 17u)) {
+        return 0u;
+      }
+      *pCurrent++ = *sDescription++;
+    }
+    *pCurrent++ = ':';
+    *pCurrent++ = ' ';
+  }
+  if (Negative != 0u) {
+    *pCurrent++ = '-';
+  }
+  pDigits = pCurrent;
+  do {
+#if defined(__ARM_FEATURE_IDIV)
+    *pCurrent++ = (char)('0' + (IntegerPart % 10u));
+    IntegerPart /= 10u;
+#else
+    DivResult = _DivMod10(IntegerPart);
+    IntegerPart = (uint32_t)(DivResult >> 32);
+    *pCurrent++ = (char)('0' + (unsigned)DivResult);
+#endif
+  } while (IntegerPart != 0u);
+  pLeft = pDigits;
+  pRight = pCurrent - 1;
+  while (pLeft < pRight) {
+    char Temp = *pLeft;
+
     *pLeft++ = *pRight;
     *pRight-- = Temp;
   }
@@ -159,9 +220,53 @@ static void _LogFloatParts(const char * sDescription,
   }
 }
 
+#endif
+
 #if RTT_FLOAT_USE_MODFF
 
+#if LOG_ENABLE_TYPED_FLOAT
+
 /* 备用路径使用 modff，代码更通用，但会依赖目标的浮点运行库。 */
+static void _FloatToParts(float Value,
+                          uint32_t * pIntegerPart,
+                          unsigned * pDecimalPart,
+                          unsigned * pNegative,
+                          unsigned * pSpecial) {
+  float IntegerPart;
+  float Fraction;
+  float Magnitude;
+
+  *pSpecial = RTT_FLOAT_SPECIAL_NONE;
+  *pNegative = Value < 0.0f;
+  /* IEEE-754 中只有 NaN 不等于自身。 */
+  if (Value != Value) {
+    *pSpecial = RTT_FLOAT_SPECIAL_NAN;
+    return;
+  }
+  /* 有限数相减为 0；无穷减自身产生 NaN，由此避免额外的 isinf 依赖。 */
+  if ((Value == Value) && ((Value - Value) != (Value - Value))) {
+    *pSpecial = RTT_FLOAT_SPECIAL_INFINITY;
+    return;
+  }
+
+  Magnitude = (*pNegative != 0u) ? -Value : Value;
+  if (Magnitude >= 0x1p32f) {
+    *pSpecial = RTT_FLOAT_SPECIAL_OVERFLOW;
+    return;
+  }
+
+  IntegerPart = 0.0f;
+  Fraction = modff(Magnitude, &IntegerPart);
+  *pIntegerPart = (uint32_t)IntegerPart;
+  /* 固定三位小数采用截断语义，与无 FPU 路径保持一致。 */
+  *pDecimalPart = (unsigned)(Fraction * 1000.0f);
+}
+
+#endif
+
+#if LOG_ENABLE_FLOAT
+
+/* 保持 legacy modff 路径原有的控制流、栈布局和生成代码。 */
 void RTT_LogFloat3(float Value, const char * sDescription) {
   float IntegerPart;
   float Fraction;
@@ -170,12 +275,10 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   unsigned DecimalPart;
   unsigned Negative;
 
-  /* IEEE-754 中只有 NaN 不等于自身。 */
   if (Value != Value) {
     _LogFloatText(sDescription, "NaN");
     return;
   }
-  /* 有限数相减为 0；无穷减自身产生 NaN，由此避免额外的 isinf 依赖。 */
   if ((Value == Value) && ((Value - Value) != (Value - Value))) {
     _LogFloatText(sDescription, Value < 0.0f ? "-Inf" : "Inf");
     return;
@@ -191,20 +294,22 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
   IntegerPart = 0.0f;
   Fraction = modff(Magnitude, &IntegerPart);
   IntegerPartAbs = (uint32_t)IntegerPart;
-  /* 固定三位小数采用截断语义，与无 FPU 路径保持一致。 */
   DecimalPart = (unsigned)(Fraction * 1000.0f);
   if ((IntegerPartAbs == 0u) && (DecimalPart == 0u)) {
     Negative = 0u;
   }
-
   _LogFloatParts(sDescription, Negative, IntegerPartAbs, DecimalPart);
 }
+
+#endif
 
 #else
 
 /*
- * 无 FPU 路径按 IEEE-754 binary32 的符号位、指数和尾数拆出十进制整数及
- * 三位小数，避免链接 modff 和软浮点除法。pSpecial 单独返回特殊值类别。
+ * 纯转换核心只拆分数值，不执行格式化或 RTT 写入。legacy 与 typed API 同时
+ * 启用时共享这一份实现；仅有一个调用方时允许编译器内联，以免增加调用开销。
+ * 按 IEEE-754 binary32 的符号位、指数和尾数拆出十进制整数及三位小数，
+ * 避免链接 modff 和软浮点除法。pSpecial 单独返回特殊值类别。
  */
 static void _FloatToParts(float Value,
                           uint32_t * pIntegerPart,
@@ -273,6 +378,8 @@ static void _FloatToParts(float Value,
   }
 }
 
+#if LOG_ENABLE_FLOAT
+
 void RTT_LogFloat3(float Value, const char * sDescription) {
   uint32_t IntegerPart;
   unsigned DecimalPart;
@@ -297,7 +404,85 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
 
 #endif
 
-#else
+#endif
+
+#if LOG_ENABLE_TYPED_FLOAT
+
+#define RTT_TYPED_FLOAT_LABEL_MAX_SIZE (46u)
+#define RTT_TYPED_FLOAT_VALUE_MAX_SIZE (16u)
+
+#if (RTT_TYPED_FLOAT_LABEL_MAX_SIZE + 2u + \
+     RTT_TYPED_FLOAT_VALUE_MAX_SIZE) > RTT_FLOAT_DIRECT_BUFFER_SIZE
+  #error "RTT typed float frame exceeds its direct buffer"
+#endif
+
+static char * _AppendTypedLabel(char * pBuffer, const char * pLabel) {
+  char * pCurrent = pBuffer;
+
+  if (pLabel != NULL) {
+    while (((unsigned)(pCurrent - pBuffer) < RTT_TYPED_FLOAT_LABEL_MAX_SIZE) &&
+           (*pLabel != '\0')) {
+      *pCurrent++ = *pLabel++;
+    }
+  }
+  if (pCurrent != pBuffer) {
+    *pCurrent++ = ':';
+    *pCurrent++ = ' ';
+  }
+  return pCurrent;
+}
+
+static char * _AppendFloatText(char * pCurrent, const char * pText) {
+  while (*pText != '\0') {
+    *pCurrent++ = *pText++;
+  }
+  *pCurrent++ = '\n';
+  return pCurrent;
+}
+
+int RTT_LogF32(const char * pLabel, float Value) {
+  char Buffer[RTT_FLOAT_DIRECT_BUFFER_SIZE];
+  char * pCurrent;
+  const char * pSpecialText;
+  uint32_t IntegerPart;
+  unsigned DecimalPart;
+  unsigned Negative;
+  unsigned Special;
+  unsigned Length;
+
+  _FloatToParts(Value, &IntegerPart, &DecimalPart, &Negative, &Special);
+  pCurrent = _AppendTypedLabel(Buffer, pLabel);
+  if (Special != RTT_FLOAT_SPECIAL_NONE) {
+    if (Special == RTT_FLOAT_SPECIAL_NAN) {
+      pSpecialText = "NaN";
+    } else if (Special == RTT_FLOAT_SPECIAL_INFINITY) {
+      pSpecialText = (Negative != 0u) ? "-Inf" : "Inf";
+    } else {
+      pSpecialText = (Negative != 0u) ? "-Overflow" : "Overflow";
+    }
+    pCurrent = _AppendFloatText(pCurrent, pSpecialText);
+  } else {
+    if ((IntegerPart == 0u) && (DecimalPart == 0u)) {
+      Negative = 0u;
+    }
+    pCurrent = _AppendTypedFloatParts(pCurrent,
+                                      Negative,
+                                      IntegerPart,
+                                      DecimalPart);
+  }
+
+  Length = (unsigned)(pCurrent - Buffer);
+  if (SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX, Buffer, Length) != Length) {
+    return -1;
+  }
+  return (int)Length;
+}
+
+#endif
+
+#endif
+
+#if !RTT_LOG_ENABLE || !LOG_ENABLE_FLOAT
 
 /* 模块关闭时保留符号，避免直接调用方因条件编译产生链接差异。 */
 void RTT_LogFloat3(float Value, const char * sDescription) {

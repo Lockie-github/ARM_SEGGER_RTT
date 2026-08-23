@@ -17,6 +17,7 @@
 /* 日志输出形式。 */
 #define LOG_ENABLE_LITE      0     ///< 1：轻量输出，不添加级别前缀及 ANSI 颜色；0：完整输出。建议在资源紧张的MCU配置此选项为1
 #define LOG_ENABLE_TYPED     0     ///< 1：启用专用类型日志；0：完全移除相关接口和实现。建议在资源紧张的MCU配置此选项为1
+#define LOG_ENABLE_TYPED_FLOAT 0   ///< 1：启用 float 专用类型日志；0：完全移除相关接口和实现。
 
 /* 各日志接口独立开关，仅在 RTT_LOG_ENABLE 为 1 时生效。 */
 #define LOG_ENABLE_INFO      1     ///< 1：启用 log_info；0：移除信息级日志及其参数求值。

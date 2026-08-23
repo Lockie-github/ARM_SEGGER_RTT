@@ -49,13 +49,16 @@ Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问�
    不输出颜色及等级前缀；该开关不影响 `log_print`、`log_string` 和浮点日志。
 3. `LOG_ENABLE_INFO`、`LOG_ENABLE_DEBUG`、`LOG_ENABLE_WARN`、
    `LOG_ENABLE_ERROR`、`LOG_ENABLE_PRINT`、`LOG_ENABLE_STRING` 和
-   `LOG_ENABLE_FLOAT` 分别控制既有日志；`LOG_ENABLE_TYPED` 独立控制四个固定类型
-   日志接口。所有单项开关在完整模式和轻量模式下都独立生效。
+   `LOG_ENABLE_FLOAT` 分别控制既有日志；`LOG_ENABLE_TYPED` 独立控制四个整数及
+   指针 typed 接口，`LOG_ENABLE_TYPED_FLOAT` 独立控制 float typed 接口。
+   所有单项开关在完整模式和轻量模式下都独立生效。
 
-工程默认开启 `RTT_LOG_ENABLE`、关闭 `LOG_ENABLE_LITE`，并开启所有单项日志。
+工程默认开启 `RTT_LOG_ENABLE`、关闭 `LOG_ENABLE_LITE`，并开启所有既有单项日志。
 日志默认写入 RTT Up Buffer 0，完整模式下启用 ANSI 颜色。
 `LOG_ENABLE_TYPED` 例外地默认关闭，启用后提供绕过通用 formatter 的 `int32_t`、
 `uint32_t`、固定宽度十六进制和指针日志。
+`LOG_ENABLE_TYPED_FLOAT` 同样默认关闭，启用后提供固定三位小数的 `log_f32`；它不依赖
+`LOG_ENABLE_TYPED` 或 `LOG_ENABLE_FLOAT`，可在关闭通用 formatter 后单独使用。
 `RTT_FLOAT_USE_MODFF` 默认为 `0`，浮点日志使用不依赖浮点运行库的 IEEE-754
 binary32 位解析实现。当前浮点 API 固定输出三位小数，并以代码体积优先、输出效率
 可选为设计原则；在这一范围内，改用 `modff` 通常不会带来性能或体积收益。该备用
@@ -98,6 +101,7 @@ RTT C 和 `.S` 源传入 `-DRTT_USE_ASM=0`，随后清理并重新编译 RTT 对
 | Lite 等级日志 | `LOG_ENABLE_LITE=1`，所有单项日志开启 | 等级日志只输出正文和换行，API 使用方式不变 |
 | 极致精简模式 | 关闭等级及浮点日志，只开启 `LOG_ENABLE_PRINT` 和 `LOG_ENABLE_STRING` | 在保留格式化和字符串输出能力的前提下，以运行效率和 Flash 占用为最高优先级 |
 | 固定类型模式 | 关闭等级、格式化及浮点日志，只开启 `LOG_ENABLE_TYPED` | 只输出 32 位整数、十六进制和指针，避免链接通用 formatter |
+| 固定类型与浮点模式 | 关闭等级及格式化日志，开启 `LOG_ENABLE_TYPED` 和 `LOG_ENABLE_TYPED_FLOAT` | 增加固定三位小数输出，仍不链接通用 formatter |
 
 资源极其紧张时，推荐使用极致精简模式：格式化内容使用 `log_print`，已有字符串
 使用路径更短的 `log_string`。
@@ -236,6 +240,7 @@ add_subdirectory(ARM_SEGGER_RTT)
 | `log_u32(Label, Value)` | 32 位无符号十进制 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_TYPED` |
 | `log_hex32(Label, Value)` | 8 位大写十六进制 | 无颜色，`Label: 0x1234ABCD` + 换行 | `LOG_ENABLE_TYPED` |
 | `log_pointer(Label, Value)` | 指针宽度的大写十六进制 | 无颜色，`Label: 0x20000000` + 换行 | `LOG_ENABLE_TYPED` |
+| `log_f32(Label, Value)` | typed 固定三位小数 | 无颜色，`Label: Value` + 换行 | `LOG_ENABLE_TYPED_FLOAT` |
 
 资源极其紧张时，`log_string` 和 `log_print` 构成极致精简输出路径：
 - `log_string` 不进入格式化器，直接输出已有字符串，是无需格式化时运行路径最短、
@@ -270,6 +275,7 @@ log_i32("offset", -12);
 log_u32(NULL, 4294967295u);
 log_hex32("status", 0x89ABCDEFu);
 log_pointer("buffer", Buffer);
+log_f32("voltage", 3.3f);
 log_float(1.25f);
 log_float_label("temperature", -2.5f);
 ```
@@ -287,15 +293,16 @@ offset: -12
 4294967295
 status: 0x89ABCDEF
 buffer: 0x20000000
+voltage: 3.299
 1.250
 temperature: -2.500
 ```
 
 ### 专用类型日志
 
-`log_i32`、`log_u32`、`log_hex32` 和 `log_pointer` 不解析格式串，不添加等级、
-颜色或 ANSI 控制序列，并固定追加一个换行。`Label` 为 `NULL` 或空字符串时只输出
-数值；非空标签与数值间固定使用 `": "`。`LOG_ENABLE_LITE` 和
+`log_i32`、`log_u32`、`log_hex32`、`log_pointer` 和 `log_f32` 不解析格式串，
+不添加等级、颜色或 ANSI 控制序列，并固定追加一个换行。`Label` 为 `NULL` 或空字符串
+时只输出数值；非空标签与数值间固定使用 `": "`。`LOG_ENABLE_LITE` 和
 `RTT_LOG_USE_COLOR` 不改变这些接口的输出。
 
 十进制转换使用移位和乘法，不调用整数除法；十六进制固定使用大写字符。
@@ -305,6 +312,12 @@ typed 标签约定使用 ASCII，最多输出前 46 B；超出部分直接截断
 `-fstack-usage` 测得，四个接口自身的最深静态调用链为 112 B，不包含底层
 `SEGGER_RTT_Write()` 的栈占用。关闭 `LOG_ENABLE_TYPED` 或 `RTT_LOG_ENABLE` 后，
 四个宏不会求值参数，相关实现也会在预处理阶段移除。
+
+`log_f32` 由独立的 `LOG_ENABLE_TYPED_FLOAT` 控制，固定三位小数并沿用下节的截断、
+特殊值和范围规则。标签同样最多输出前 46 B，数值部分始终完整；最大帧恰好为
+64 B，并通过一次 `SEGGER_RTT_Write()` 提交。短写时底层 `RTT_LogF32` 返回 `-1`。
+关闭 `LOG_ENABLE_TYPED_FLOAT` 或总日志开关后，宏参数不会被求值，转换及写入实现也会
+被移除。
 
 ### 浮点日志
 
@@ -316,12 +329,19 @@ typed 标签约定使用 ASCII，最多输出前 46 B；超出部分直接截断
 | 特殊值 | 输出 `NaN`、`Inf`、`-Inf`、`Overflow` 或 `-Overflow` |
 | 可表示范围 | 绝对值必须小于 `2^32`，否则输出溢出提示 |
 | 浮点快速路径 | 默认为 `0`；设为 `1` 后，常规有限值且标签不超过 47B 时使用单次 RTT 写入，以增加部分 Flash 为代价提高输出效率 |
+| float typed 路径 | `log_f32` 始终使用 64 B 固定帧并单次写入，不受 `RTT_LOG_FLOAT_FAST_PATH` 影响 |
 
 默认使用不依赖 `modff` 或软浮点除法的 IEEE-754 binary32 解析路径。当前 API
 固定输出三位小数，且 SEGGER RTT 原生 `SEGGER_RTT_printf` 不支持 `%f`、`%e`、
 `%g` 等浮点转换，因此 `RTT_FLOAT_USE_MODFF` 不是性能开关，也不会为现有接口增加
 动态精度能力。它作为未来动态小数位数接口、非 IEEE-754 平台或更通用浮点格式化的
 备用实现保留；设为 `1` 后改用 `modff`，GCC 工程最终链接时通常需要 `-lm`。
+
+默认位解析实现将数值拆分集中在不执行格式化和 I/O 的纯转换核心中。只启用一个浮点
+API 时，编译器可将核心内联以避免调用开销；同时启用 legacy 与 typed 浮点 API 时，
+两者共享一份转换代码以控制 Flash。legacy-only 构建保留原有控制流，受控构建中其
+机器码、代码尺寸和静态栈占用不因 `log_f32` 的加入而变化。`modff` 是非默认备用配置，
+legacy-only 路径也保持原实现，避免为了源码层面的强制复用而增加函数调用。
 
 ### 底层接口
 
@@ -334,6 +354,7 @@ int Count;
 Count = RTT_LogPrintf(RTT_LOG_LEVEL_INFO, "state=%u", 3u);
 Count = SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "raw=%u", 3u);
 Count = RTT_LogI32("offset", -12);
+Count = RTT_LogF32("voltage", 3.3f);
 RTT_LogFloat3(1.25f, "voltage");
 ```
 
@@ -342,6 +363,7 @@ RTT_LogFloat3(1.25f, "voltage");
 | `RTT_LogPrintf(Level, Format, ...)` | 添加等级前缀和换行；`RTT_LOG_LEVEL_PRINT` 不添加等级前缀 | 成功时返回字符数；写入失败返回 `-1`；模块关闭返回 `0` |
 | `SEGGER_RTT_printf(BufferIndex, Format, ...)` | 写入指定 Up Buffer，不添加前缀、颜色或换行 | 成功时返回字符数；写入失败返回 `-1` |
 | `RTT_LogI32`、`RTT_LogU32`、`RTT_LogHex32`、`RTT_LogPointer` | 写入固定格式类型日志和换行 | 成功时返回实际字节数；短写或长度溢出返回 `-1` |
+| `RTT_LogF32(Label, Value)` | 按 typed 规则写入固定三位小数和换行 | 成功时返回实际字节数；短写返回 `-1` |
 | `RTT_LogFloat3(Value, Description)` | `Description` 非空时输出 `Description: Value`，否则只输出数值 | 无返回值 |
 
 ## 格式化支持

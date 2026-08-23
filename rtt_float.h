@@ -24,6 +24,10 @@
   #define RTT_LOG_FLOAT_FAST_PATH 0
 #endif
 
+#ifndef LOG_ENABLE_TYPED_FLOAT
+  #define LOG_ENABLE_TYPED_FLOAT 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,6 +42,20 @@ extern "C" {
  * @param sDescription 可选说明文字；传入 NULL 时只输出数值。
  */
 void RTT_LogFloat3(float Value, const char * sDescription);
+
+#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED_FLOAT
+/**
+ * @brief 以 typed 规则输出固定三位小数的单精度浮点数。
+ *
+ * 标签最多输出前 46 B，超出部分直接截断；数值部分始终完整。整帧通过
+ * 一次非格式化 RTT 写入提交，不受 RTT_LOG_FLOAT_FAST_PATH 影响。
+ *
+ * @param pLabel 可选标签；NULL 或空字符串表示无标签。
+ * @param Value  待输出的单精度浮点数。
+ * @return 成功时返回实际写入字节数，短写时返回 -1。
+ */
+int RTT_LogF32(const char * pLabel, float Value);
+#endif
 
 #ifdef __cplusplus
 }
