@@ -3,10 +3,6 @@
 
 #include <stdarg.h>
 
-#if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
-  #include <limits.h>
-#endif
-
 #if RTT_LOG_ENABLE
 
 /*
@@ -95,11 +91,17 @@ int RTT_LogString(const char * pText) {
 
 #if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
 
-#define RTT_TYPED_LOG_FRAME_SIZE    64u
+#define RTT_TYPED_LABEL_MAX_SIZE    46u
+#define RTT_TYPED_MIN_FRAME_SIZE    64u
 #define RTT_TYPED_I32_VALUE_SIZE    12u
 #define RTT_TYPED_U32_VALUE_SIZE    11u
 #define RTT_TYPED_HEX32_VALUE_SIZE  11u
 #define RTT_TYPED_POINTER_SIZE      ((sizeof(uintptr_t) * 2u) + 3u)
+#define RTT_TYPED_POINTER_FRAME_SIZE \
+  (RTT_TYPED_LABEL_MAX_SIZE + 2u + RTT_TYPED_POINTER_SIZE)
+#define RTT_TYPED_LOG_FRAME_SIZE \
+  ((RTT_TYPED_POINTER_FRAME_SIZE > RTT_TYPED_MIN_FRAME_SIZE) \
+     ? RTT_TYPED_POINTER_FRAME_SIZE : RTT_TYPED_MIN_FRAME_SIZE)
 #define RTT_TYPED_LOG_ERROR         (-1)
 
 static uint32_t rtt_typed_divide_u32_by_10(uint32_t Value,
@@ -177,13 +179,6 @@ static unsigned rtt_typed_build_hex(char * pBuffer,
   return NumDigits + 3u;
 }
 
-static int rtt_typed_write_exact(const char * pData, unsigned Length) {
-  if (SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX, pData, Length) != Length) {
-    return RTT_TYPED_LOG_ERROR;
-  }
-  return (int)Length;
-}
-
 static int rtt_typed_write_frame(const char * pLabel,
                                  const char * pValue,
                                  unsigned ValueLength) {
@@ -193,48 +188,33 @@ static int rtt_typed_write_frame(const char * pLabel,
   unsigned Index;
 
   if ((pLabel != NULL) && (*pLabel != '\0')) {
-    while (pLabel[LabelLength] != '\0') {
-      if (LabelLength == (unsigned)INT_MAX) {
-        return RTT_TYPED_LOG_ERROR;
-      }
+    while ((LabelLength < RTT_TYPED_LABEL_MAX_SIZE) &&
+           (pLabel[LabelLength] != '\0')) {
       ++LabelLength;
     }
   }
 
-  if (LabelLength > ((unsigned)INT_MAX - ValueLength - 2u)) {
-    return RTT_TYPED_LOG_ERROR;
-  }
   TotalLength = LabelLength + ValueLength;
   if (LabelLength != 0u) {
     TotalLength += 2u;
   }
 
-  if (TotalLength <= sizeof(Frame)) {
-    Index = 0u;
-    if (LabelLength != 0u) {
-      unsigned LabelIndex;
+  Index = 0u;
+  if (LabelLength != 0u) {
+    unsigned LabelIndex;
 
-      for (LabelIndex = 0u; LabelIndex < LabelLength; ++LabelIndex) {
-        Frame[Index++] = pLabel[LabelIndex];
-      }
-      Frame[Index++] = ':';
-      Frame[Index++] = ' ';
+    for (LabelIndex = 0u; LabelIndex < LabelLength; ++LabelIndex) {
+      Frame[Index++] = pLabel[LabelIndex];
     }
-    while (Index < TotalLength) {
-      Frame[Index] = pValue[Index - LabelLength -
-                            ((LabelLength != 0u) ? 2u : 0u)];
-      ++Index;
-    }
-    return rtt_typed_write_exact(Frame, TotalLength);
+    Frame[Index++] = ':';
+    Frame[Index++] = ' ';
   }
-
-  if (rtt_typed_write_exact(pLabel, LabelLength) < 0) {
-    return RTT_TYPED_LOG_ERROR;
+  while (Index < TotalLength) {
+    Frame[Index] = pValue[Index - LabelLength -
+                          ((LabelLength != 0u) ? 2u : 0u)];
+    ++Index;
   }
-  if (rtt_typed_write_exact(": ", 2u) < 0) {
-    return RTT_TYPED_LOG_ERROR;
-  }
-  if (rtt_typed_write_exact(pValue, ValueLength) < 0) {
+  if (SEGGER_RTT_Write(RTT_LOG_BUFFER_INDEX, Frame, TotalLength) != TotalLength) {
     return RTT_TYPED_LOG_ERROR;
   }
   return (int)TotalLength;

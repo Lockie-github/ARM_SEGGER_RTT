@@ -199,8 +199,9 @@ int RTT_LogPointer(const char * pLabel, const void * pValue);
 #endif
 
 /*
- * Fixed-format typed logging bypasses the general formatter. Each call adds
- * one newline; a NULL or empty label writes only the value.
+ * 固定类型日志绕过通用格式化器。标签按字节处理，建议使用 ASCII；最多输出
+ * 前 46 B，超出部分直接截断且不添加省略号。每次调用固定追加一个换行符；
+ * 标签为 NULL 或空字符串时只输出数值。
  */
 #if RTT_LOG_ENABLE && LOG_ENABLE_TYPED
   #define log_i32(Label, Value) \
