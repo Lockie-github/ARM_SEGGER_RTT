@@ -29,7 +29,14 @@ static void _LogFloatText(const char * sDescription, const char * sText) {
 
 #if (LOG_ENABLE_FLOAT && RTT_LOG_FLOAT_FAST_PATH) || LOG_ENABLE_TYPED_FLOAT
 
-#define RTT_FLOAT_DIRECT_BUFFER_SIZE (64u)
+#define RTT_FLOAT_DIRECT_BUFFER_SIZE        (64u)
+#define RTT_FLOAT_DIRECT_VALUE_MAX_SIZE     (16u)
+#define RTT_FLOAT_LABEL_SEPARATOR_SIZE      (2u)
+
+#if (RTT_FLOAT_DIRECT_VALUE_MAX_SIZE + RTT_FLOAT_LABEL_SEPARATOR_SIZE) > \
+    RTT_FLOAT_DIRECT_BUFFER_SIZE
+  #error "RTT float value frame exceeds its direct buffer"
+#endif
 
 #if !defined(__ARM_FEATURE_IDIV)
 
@@ -144,7 +151,9 @@ static unsigned _TryLogFloatPartsDirect(const char * sDescription,
   if (sDescription != NULL) {
     while (*sDescription != '\0') {
       if ((unsigned)(pCurrent - Buffer) >=
-          (RTT_FLOAT_DIRECT_BUFFER_SIZE - 17u)) {
+          (RTT_FLOAT_DIRECT_BUFFER_SIZE -
+           RTT_FLOAT_DIRECT_VALUE_MAX_SIZE -
+           RTT_FLOAT_LABEL_SEPARATOR_SIZE)) {
         return 0u;
       }
       *pCurrent++ = *sDescription++;
@@ -409,10 +418,9 @@ void RTT_LogFloat3(float Value, const char * sDescription) {
 #if LOG_ENABLE_TYPED_FLOAT
 
 #define RTT_TYPED_FLOAT_LABEL_MAX_SIZE (46u)
-#define RTT_TYPED_FLOAT_VALUE_MAX_SIZE (16u)
 
-#if (RTT_TYPED_FLOAT_LABEL_MAX_SIZE + 2u + \
-     RTT_TYPED_FLOAT_VALUE_MAX_SIZE) > RTT_FLOAT_DIRECT_BUFFER_SIZE
+#if (RTT_TYPED_FLOAT_LABEL_MAX_SIZE + RTT_FLOAT_LABEL_SEPARATOR_SIZE + \
+     RTT_FLOAT_DIRECT_VALUE_MAX_SIZE) > RTT_FLOAT_DIRECT_BUFFER_SIZE
   #error "RTT typed float frame exceeds its direct buffer"
 #endif
 
