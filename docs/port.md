@@ -3,12 +3,17 @@
 - [目录](#目录)
 - [移植](#移植)
   - [Make](#make)
+    - [编译和烧录](#编译和烧录)
   - [CMake](#cmake)
     - [配置、编译和烧录](#配置编译和烧录)
+      - [环境准备](#环境准备)
       - [Debug](#debug)
       - [Release](#release)
-      - [其他常用命令](#其他常用命令)
-    - [常见问题](#常见问题)
+  - [RTT 主机连接方式](#rtt-主机连接方式)
+    - [已验证方式：J-Link](#已验证方式j-link)
+    - [其他 RTT 主机工具](#其他-rtt-主机工具)
+  - [迁移验收](#迁移验收)
+  - [常见问题](#常见问题)
 - [修订记录](#修订记录)
 
 ---
@@ -18,12 +23,21 @@
 ## Make
 1. 拉取本仓库到STM32CubeMX生成的Makefile工程路径下
 2. 在生成的工程的Makefile文件中的指定位置分别加入以下代码:
-```Makefile
 
+在 CubeMX 生成的 Makefile 中，找到 C_INCLUDES 定义块，在该定义块结束后、`# compile gcc flags` 之前插入以下内容。此位置必须位于 `OBJECTS` 根据 `C_SOURCES/ASMM_SOURCES` 生成之前。
+
+```Makefile
+# C includes
+#C_INCLUDES = \
+#-ICore/Inc \
+# ...
+
+# RTT BEGIN Includes 
 include ARM_SEGGER_RTT/segger_rtt.mk
 EXTRA_INCLUDES := $(patsubst %,-I%,$(EXTRA_INCLUDES))
 C_SOURCES += $(EXTRA_C_SOURCES)
 C_INCLUDES += $(EXTRA_INCLUDES)
+# RTT END Includes
 # compile gcc flags
 
 # *** EOF ***
@@ -99,37 +113,56 @@ fr:
 	@echo "flash & run"
 	$(MAKE) flash
 	$(MAKE) run
-# ============ Flash/RAM Analysis Targets ============
-# .PHONY: analyze analyze-printf analyze-symbols analyze-flash
 
-# # 主分析命令：显示 printf 相关符号 + 按大小排序的符号表 + 内存摘要
-# analyze: analyze-flash analyze-printf analyze-symbols
-
-# # 显示 Flash/RAM 使用摘要
-# analyze-flash:
-# 	@echo
-# 	@echo "Memory Usage Summary for $(TARGET).elf"
-# 	@$(SZ) $(BUILD_DIR)/$(TARGET).elf
-# 	@echo
-# 	@$(PREFIX)size -A $(BUILD_DIR)/$(TARGET).elf | grep -E "\.(text|data|bss)" | \
-# 		awk '{printf "  \033[0;34m%-8s\033[0m %6d bytes (%.1f KB)\n", $$1, $$2, $$2/1024}'
-
-# # 分析 printf/vsnprintf 相关符号
-# analyze-printf:
-# 	@echo
-# 	@echo "Searching for printf/vsnprintf related symbols:"
-# 	@$(PREFIX)objdump -t $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
-# 		grep -i "printf\|vsnprintf" | \
-# 		sed 's/^/   /' || echo "   \033[0;32m✓ No printf/vsnprintf symbols found.\033[0m"
-
-# # 分析最大符号（按大小排序，显示最大的20个）
-# analyze-symbols:
-# 	@echo
-# 	@echo "Top 20 Largest Symbols by Size:"
-# 	@$(PREFIX)nm --print-size -S $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
-# 		sort -k2 -g | tail -20 | \
-# 		awk '{printf "   \033[0;35m%6s B\033[0m | %s\n", $$2, $$4}' || echo "   \033[0;31m✗ Failed to analyze symbols (check .elf exists)\033[0m"
 ```
+
+可选的工具:
+
+在Makefile的fr命令后加入:
+
+```Makefile
+# ============ Flash/RAM Analysis Targets ============
+.PHONY: analyze analyze-printf analyze-symbols analyze-flash
+
+# 主分析命令：显示 printf 相关符号 + 按大小排序的符号表 + 内存摘要
+analyze: analyze-flash analyze-printf analyze-symbols
+
+# 显示 Flash/RAM 使用摘要
+analyze-flash:
+	@echo
+	@echo "Memory Usage Summary for $(TARGET).elf"
+	@$(SZ) $(BUILD_DIR)/$(TARGET).elf
+	@echo
+	@$(PREFIX)size -A $(BUILD_DIR)/$(TARGET).elf | grep -E "\.(text|data|bss)" | \
+ 		awk '{printf "  \033[0;34m%-8s\033[0m %6d bytes (%.1f KB)\n", $$1, $$2, $$2/1024}'
+
+# 分析 printf/vsnprintf 相关符号
+analyze-printf:
+	@echo
+	@echo "Searching for printf/vsnprintf related symbols:"
+	@$(PREFIX)objdump -t $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
+		grep -i "printf\|vsnprintf" | \
+		sed 's/^/   /' || echo "   \033[0;32m✓ No printf/vsnprintf symbols found.\033[0m"
+
+# 分析最大符号（按大小排序，显示最大的20个）
+ analyze-symbols:
+ 	@echo
+ 	@echo "Top 20 Largest Symbols by Size:"
+ 	@$(PREFIX)nm --print-size -S $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
+ 		sort -k2 -g | tail -20 | \
+ 		awk '{printf "   \033[0;35m%6s B\033[0m | %s\n", $$2, $$4}' || echo "   \033[0;31m✗ Failed to analyze symbols (check .elf exists)\033[0m"
+
+```
+
+### 编译和烧录
+
+此处描述为使用GNU编译工具进行的操作
+1.  在终端输入编译指令,等待编译成功
+    ``` make -j```
+2. 编译完成后,输入烧录指令
+    ``` make flash ```
+
+其他操作见[其他常用命令](##RTT%20主机连接方式)
 
 ## CMake
 1. 拉取本仓库到STM32CubeMX生成的CMake工程路径下
@@ -152,38 +185,44 @@ fr:
 
     3. 在末尾添加
 
-```CMake
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O binary
-            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
-            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.bin
-    COMMAND ${CMAKE_OBJCOPY} -O ihex
-            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
-            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.hex
-    COMMENT "Generating binary and hex files"
-    VERBATIM
-)
-```
+    ```CMake
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -O binary
+                $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+                $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.bin
+        COMMAND ${CMAKE_OBJCOPY} -O ihex
+                $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+                $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/${CMAKE_PROJECT_NAME}.hex
+        COMMENT "Generating binary and hex files"
+        VERBATIM
+    )
+    ```
 
-1. 将本仓库提供的 `Makefile` 复制到项目根目录。可以手动复制或在项目根目录的控制台中执行：
+3. 将本仓库提供的 `Makefile` 复制到项目根目录。可以手动复制或在项目根目录的控制台中执行：
 ```shell
 cp ARM_SEGGER_RTT/Makefile ./Makefile
 ```
 
 ### 配置、编译和烧录
 
+此处描述为使用STM32Cube插件的cube-cmake进行的操作
+
+#### 环境准备
 首次使用新工程时，STM32Cube 插件可能尚未将其识别为 STM32Cube 工程。请先完成以下操作：
 
 1. 使用 VS Code 打开 STM32CubeMX 生成的工程根目录。
 2. 如果 VS Code 弹出“是否加载为 STM32Cube 工程”的提示，请确认加载。
 3. 如果没有出现提示，按 `Cmd+Shift+P`（Windows/Linux 为 `Ctrl+Shift+P`）打开命令面板，执行 `STM32Cube: Set up STM32Cube projects`，然后选择当前工程并完成设置。
 4. 设置完成后关闭已有终端，并新建一个 VS Code 集成终端，使插件提供的工具路径生效。
-5. 在新终端中确认 `cube-cmake` 可用：
+5. 在新终端中进入工程根目录，通过包装 Makefile 完成配置和编译：
 
-```shell
-command -v cube-cmake
-cube-cmake --version
-```
+    ```shell
+    make preset_debug
+    make d
+    ```
+
+    这两个目标会调用插件提供的 `cube-cmake`。无需在工程外直接执行
+    `cube-cmake`，也不要用系统 `cmake` 代替。
 
 以下命令均在工程根目录的 VS Code 集成终端中执行。
 
@@ -214,6 +253,7 @@ make debug
 ```
 
 `make debug` 会先执行 Debug 编译，再生成 J-Link 下载脚本并烧录固件。它要求已经执行过 `make preset_debug`，并且系统中可以找到 `JLinkExe`。
+其他操作见[其他常用命令](##RTT%20主机连接方式)
 
 #### Release
 
@@ -236,30 +276,63 @@ make preset_release && make r
 make release
 ```
 
-#### 其他常用命令
-
-```shell
-make info       # 显示从 .ioc 和 CMakeLists.txt 中解析出的 MCU 与目标名称
-make clean      # 删除整个 build 目录
-make erase      # 使用 J-Link 擦除芯片
-make run        # 启动 J-Link 并连接 RTT
-make rtt        # 连接 RTT Telnet 端口
-make rttlog     # 将带时间戳的 RTT 输出保存到 logs 目录
-```
-
 `preset_debug` 和 `preset_release` 会先删除对应的构建目录再重新生成，因此修改工具链文件、生成器或重要 CMake 配置后应重新执行相应的 preset 命令；仅修改 C/C++ 源文件时，直接执行 `make d` 或 `make r` 即可。
 
-### 常见问题
+其他操作见[其他常用命令](##RTT%20主机连接方式)
+
+## RTT 主机连接方式
+
+RTT 数据保存在目标 RAM 中的控制块和 Up/Down Buffer。目标侧日志代码不直接依赖
+J-Link；主机侧需要能够通过调试接口访问目标内存并识别 SEGGER RTT 控制块。
+
+### 已验证方式：J-Link
+
+本仓库提供以下辅助命令：
+
+| 命令 | 作用 |
+|---|---|
+| `make run` | 使用 J-Link Commander 连接目标并开放 RTT Telnet 端口 9999 |
+| `make rtt` | 连接 `127.0.0.1:9999` 并显示通道 0 日志 |
+| `make rttlog` | 为日志添加时间戳并写入文件 |
+| `make erase` | 使用 J-Link 擦除目标芯片 |
+| `make flash` | 使用 J-Link 烧录 Make 工程固件 |
+| `make debug` | 编译并烧录 CMake Debug 固件 |
+| `make release` | 编译并烧录 CMake Release 固件 |
+
+上述命令是辅助工具，不是编译或链接 RTT 库的必要条件。
+
+### 其他 RTT 主机工具
+
+OpenOCD、pyOCD、probe-rs 以及部分 IDE 也可能通过 ST-Link、CMSIS-DAP 等探针读取
+RTT。使用这些方案时，目标侧仍可继续使用本库的日志 API，但需要按照对应工具的说明
+配置 RTT 控制块搜索、通道选择和主机输出服务。
+
+这些替代方案目前不属于本项目的实际验证范围，本仓库也暂未提供对应启动脚本。
+
+## 迁移验收
+
+迁移时应固定本库版本、主工程版本和工具链版本，并从干净构建目录执行验证。
+
+1. `git submodule status` 显示预期的 RTT tag 或提交。
+2. Debug 和 Release 均能从空构建目录完成编译、链接且无新增警告。
+3. ELF 中存在 `_SEGGER_RTT` 控制块及实际调用的日志实现。
+4. 固件能够烧录并正常启动，无 HardFault 或异常复位。
+5. 调用 `log_info("RTT_READY value=%u", 42u)` 后，主机收到：
+   `[INFO] RTT_READY value=42`。
+6. 断开 RTT 客户端后目标程序继续运行；重新连接后能够收到新的日志。
+7. 修改 `rtt_cfg.h` 后执行 clean rebuild，配置行为与预期一致。
+
+## 常见问题
 
 1.  `cube-cmake: No such file or directory`
 
 如果执行 Makefile 时出现 `make: cube-cmake: No such file or directory`，通常表示当前工程尚未完成 STM32Cube 设置，或者终端是在插件加载前创建的。执行 `STM32Cube: Set up STM32Cube projects` 后重新新建集成终端即可。
 
-可以使用以下命令确认当前终端是否能够找到插件提供的 CMake：
+回到工程根目录，重新通过包装 Makefile 验证：
 
 ```shell
-command -v cube-cmake
-cube-cmake --version
+make preset_debug
+make d
 ```
 
 2. 执行 `make d` 或 `make r` 时提示构建目录不存在
@@ -331,6 +404,24 @@ find build -name '*.hex'
 9. `ts: command not found`
 
 `make rttts` 和 `make rttlog` 使用 `ts` 为日志添加时间戳。没有安装 `ts` 时仍可使用不带时间戳的 `make rtt`；如需时间戳功能，请安装提供 `ts` 命令的 `moreutils` 工具包。
+
+10. 没有 J-Link 是否可以使用本库
+可以。编译和链接本库不要求 J-Link，可以继续使用工程原有工具烧录固件。
+
+但查看 RTT 输出仍需要支持 RTT 的调试探针和主机软件。本仓库目前只提供并验证
+J-Link 操作流程；使用 OpenOCD、pyOCD、probe-rs 或其他工具时，需要自行完成主机侧
+RTT 配置。
+
+11. 固件可以运行，但没有 RTT 日志
+    
+    依次检查：
+    1. 应用是否实际执行了日志调用；
+    2. ELF 中是否保留 `_SEGGER_RTT` 控制块；
+    3. 主机工具是否连接了正确的 MCU 和调试接口；
+    4. 主机工具是否成功找到 RTT 控制块；
+    5. 读取的是否为 `RTT_LOG_BUFFER_INDEX` 对应的 Up Buffer；
+    6. 非零通道是否已由应用调用 `SEGGER_RTT_ConfigUpBuffer()` 完成配置；
+    7. 配置变更后是否执行了全量清理和重新构建
 
 # 修订记录
 
