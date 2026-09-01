@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+if [ -x /usr/bin/shasum ]; then
+  exec /usr/bin/shasum "$@"
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  if [ "${1:-}" = "-a" ] && [ "${2:-}" = "256" ]; then
+    shift 2
+  fi
+  exec sha256sum "$@"
+fi
+
+printf '%s\n' 'shasum compatibility requires shasum or sha256sum' >&2
+exit 127

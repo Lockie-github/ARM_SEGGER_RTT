@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "jlink_speed": 24000,
+    "rtt_port": 9999,
+    "probe_ready_timeout": 20,
+    "rtt_ready_timeout": 50,
+    "test_timeout": 120,
+    "disconnect_seconds": 3,
+    "toolchain_bin": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin",
+    "sample_count": 7168,
+    "forbidden_patterns": [
+      "RESULT=FAIL",
+      "HardFault",
+      "MemManage",
+      "BusFault",
+      "UsageFault"
+    ]
+  },
+  "targets": {
+    "f042_make": {
+      "mcu": "STM32F042G6",
+      "core": "Cortex-M0",
+      "mcu_family": 0,
+      "irq_handler": "TIM1_BRK_UP_TRG_COM_IRQHandler",
+      "irq_source": "stm32f0xx_it.c",
+      "project_dir": "../stm32f042g6make",
+      "build_system": "make",
+      "hw08_protocol": "gated-throughput",
+      "hw08_allowed_build_types": ["release"],
+      "fixture": "tests/HW/fixtures/stm32f0/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "jlink_speed": 4000,
+      "elf": "build/stm32f042g6make.elf",
+      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
+      "result_symbol": "HW08_Result",
+      "result_size": 64,
+      "result_magic": 1213682768,
+      "result_guard": 2774147072,
+      "result_version": 2,
+      "frame_magic": "H8TP0002",
+      "frame_size": 64,
+      "frame_count": 8192,
+      "target_hz": 1000,
+      "expected_mib_s": 0.02,
+      "rate_tolerance": 0.01,
+      "tp_base_ticks": 3,
+      "tp_remainder_step": 53,
+      "tp_remainder_denom": 1024,
+      "capture_seconds": 32,
+      "build": {
+        "release": [
+          ["make", "clean"],
+          ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os", "HW08_TP_RUN_ID={run_id}", "HW08_TP_BASE_TICKS={tp_base_ticks}", "HW08_TP_REMAINDER_STEP={tp_remainder_step}", "HW08_TP_REMAINDER_DENOM={tp_remainder_denom}"]
+        ]
+      },
+      "flash": {
+        "release": [
+          ["make", "flash", "DEBUG=0", "OPT=-Os", "HW08_TP_RUN_ID={run_id}", "HW08_TP_BASE_TICKS={tp_base_ticks}", "HW08_TP_REMAINDER_STEP={tp_remainder_step}", "HW08_TP_REMAINDER_DENOM={tp_remainder_denom}"]
+        ]
+      },
+      "artifacts": ["build/*.elf", "build/*.hex", "build/*.bin", "build/*.map"]
+    },
+    "f042_cmake": {
+      "mcu": "STM32F042G6",
+      "core": "Cortex-M0",
+      "mcu_family": 0,
+      "irq_handler": "TIM1_BRK_UP_TRG_COM_IRQHandler",
+      "project_dir": "../stm32f042g6cmake",
+      "build_system": "cmake",
+      "fixture": "tests/HW/fixtures/stm32f0/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "build": {
+        "debug": [["make", "preset_debug"], ["make", "d"]],
+        "release": [["make", "preset_release"], ["make", "r"]]
+      },
+      "flash": {
+        "debug": [["make", "debug"]],
+        "release": [["make", "release"]]
+      },
+      "artifacts": ["build/{cmake_build}/*.elf", "build/{cmake_build}/*.hex", "build/{cmake_build}/*.bin", "build/{cmake_build}/*.map"]
+    },
+    "f103_make": {
+      "mcu": "STM32F103C8",
+      "core": "Cortex-M3",
+      "mcu_family": 1,
+      "irq_handler": "TIM1_UP_IRQHandler",
+      "irq_source": "stm32f1xx_it.c",
+      "project_dir": "../stm32f103c8make",
+      "build_system": "make",
+      "fixture": "tests/HW/fixtures/stm32f1/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "build": {
+        "debug": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os"]]
+      },
+      "flash": {
+        "debug": [["make", "flash", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "flash", "DEBUG=0", "OPT=-Os"]]
+      },
+      "artifacts": ["build/*.elf", "build/*.hex", "build/*.bin", "build/*.map"]
+    },
+    "f103_cmake": {
+      "mcu": "STM32F103C8",
+      "core": "Cortex-M3",
+      "mcu_family": 1,
+      "irq_handler": "TIM1_UP_IRQHandler",
+      "project_dir": "../stm32f103c8cmake",
+      "build_system": "cmake",
+      "fixture": "tests/HW/fixtures/stm32f1/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "build": {
+        "debug": [["make", "preset_debug"], ["make", "d"]],
+        "release": [["make", "preset_release"], ["make", "r"]]
+      },
+      "flash": {
+        "debug": [["make", "debug"]],
+        "release": [["make", "release"]]
+      },
+      "artifacts": ["build/{cmake_build}/*.elf", "build/{cmake_build}/*.hex", "build/{cmake_build}/*.bin", "build/{cmake_build}/*.map"]
+    },
+    "f411_make": {
+      "mcu": "STM32F411CE",
+      "core": "Cortex-M4",
+      "mcu_family": 4,
+      "irq_handler": "TIM1_UP_TIM10_IRQHandler",
+      "irq_source": "stm32f4xx_it.c",
+      "project_dir": "../stm32f411cemake",
+      "build_system": "make",
+      "fixture": "tests/HW/fixtures/stm32f4/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "hw08_qualification_protocol": "gated-throughput",
+      "hw08_qualification_min_repetitions": 3,
+      "hw08_allowed_build_types": ["release"],
+      "elf": "build/stm32f411cemake.elf",
+      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
+      "result_symbol": "HW08_Result",
+      "result_size": 64,
+      "result_magic": 1213682768,
+      "result_guard": 2774147072,
+      "result_version": 2,
+      "frame_magic": "H8TP0002",
+      "frame_size": 64,
+      "frame_count": 16384,
+      "target_hz": 64000000,
+      "expected_mib_s": 0.10,
+      "rate_tolerance": 0.01,
+      "tp_base_cycles": 39062,
+      "tp_remainder_step": 1,
+      "tp_remainder_denom": 2,
+      "capture_seconds": 16,
+      "build": {
+        "debug": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os"]]
+      },
+      "flash": {
+        "debug": [["make", "flash", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "flash", "DEBUG=0", "OPT=-Os"]]
+      },
+      "artifacts": ["build/*.elf", "build/*.hex", "build/*.bin", "build/*.map"]
+    },
+    "f411_cmake": {
+      "mcu": "STM32F411CE",
+      "core": "Cortex-M4",
+      "mcu_family": 4,
+      "irq_handler": "TIM1_UP_TIM10_IRQHandler",
+      "project_dir": "../stm32f411cecmake",
+      "build_system": "cmake",
+      "fixture": "tests/HW/fixtures/stm32f4/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "build": {
+        "debug": [["make", "preset_debug"], ["make", "d"]],
+        "release": [["make", "preset_release"], ["make", "r"]]
+      },
+      "flash": {
+        "debug": [["make", "debug"]],
+        "release": [["make", "release"]]
+      },
+      "artifacts": ["build/{cmake_build}/*.elf", "build/{cmake_build}/*.hex", "build/{cmake_build}/*.bin", "build/{cmake_build}/*.map"]
+    },
+    "h7b0_make": {
+      "mcu": "STM32H7B0VB",
+      "core": "Cortex-M7",
+      "mcu_family": 7,
+      "irq_handler": "TIM1_UP_IRQHandler",
+      "irq_source": "stm32h7xx_it.c",
+      "project_dir": "../stm32h7b0vbmake",
+      "build_system": "make",
+      "fixture": "tests/HW/fixtures/stm32h7/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "hw07_start_gate": "G",
+      "hw08_gate_symbol": "HW08_HostGate",
+      "hw08_gate_value": 1213158228,
+      "hw08_frame_magic": "H8MK0001",
+      "hw08_frame_count": 16384,
+      "hw08_frame_size": 64,
+      "hw08_target_hz": 280000000,
+      "hw08_expected_mib_s": 0.36,
+      "hw08_rate_tolerance": 0.01,
+      "elf": "build/stm32h7b0vbmake.elf",
+      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
+      "build": {
+        "debug": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os"]]
+      },
+      "flash": {
+        "debug": [["make", "flash", "DEBUG=1", "OPT=-Og"]],
+        "release": [["make", "flash", "DEBUG=0", "OPT=-Os"]]
+      },
+      "artifacts": ["build/*.elf", "build/*.hex", "build/*.bin", "build/*.map"]
+    },
+    "h7b0_cmake": {
+      "mcu": "STM32H7B0VB",
+      "core": "Cortex-M7",
+      "mcu_family": 7,
+      "irq_handler": "TIM1_UP_IRQHandler",
+      "project_dir": "../stm32h7b0vbcmake",
+      "build_system": "cmake",
+      "fixture": "tests/HW/fixtures/stm32h7/hw_suite.h",
+      "fixture_marker": "HW_TEST_CASE == 8",
+      "hw07_start_gate": "G",
+      "hw08_gate_symbol": "HW08_HostGate",
+      "hw08_gate_value": 1213158228,
+      "hw08_frame_magic": "H8MK0001",
+      "hw08_frame_count": 16384,
+      "hw08_frame_size": 64,
+      "hw08_target_hz": 280000000,
+      "hw08_expected_mib_s": 0.36,
+      "hw08_rate_tolerance": 0.01,
+      "elf": "build/{cmake_build}/*.elf",
+      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
+      "build": {
+        "debug": [["make", "preset_debug"], ["make", "d"]],
+        "release": [["make", "preset_release"], ["make", "r"]]
+      },
+      "flash": {
+        "debug": [["make", "debug"]],
+        "release": [["make", "release"]]
+      },
+      "artifacts": ["build/{cmake_build}/*.elf", "build/{cmake_build}/*.hex", "build/{cmake_build}/*.bin", "build/{cmake_build}/*.map"]
+    }
+  }
+}

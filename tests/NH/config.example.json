@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "shell": "sh",
+  "host_cc": "cc",
+  "host_nm": "nm",
+  "toolchain_prefix": "arm-none-eabi-",
+  "cube_cmake": "cube-cmake",
+  "cube": "cube",
+  "workspace": "..",
+  "jobs": 8,
+  "environment": {},
+  "cases": {
+    "NH09": {
+      "environment": {
+        "NH09_SCOPE": "all"
+      }
+    }
+  }
+}
