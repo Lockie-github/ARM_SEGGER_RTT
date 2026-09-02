@@ -22,7 +22,7 @@ HW09 保留为 8 h/24 h、Cache 和长期计数闭环的扩展稳定性项目。
 
 ### 2.1 工程矩阵
 
-工程路径由 `tests/NH/config.local.json` 的 `workspace` 或 `tests/HW/targets.json` 配置，不在计划中保存某台机器的绝对路径。八个外部工程是为 RTT 库提供真实 Make/CMake、MCU 和工具链环境的本地参考工程，不属于本仓库发布物，不要求上传、固定提交或保持干净工作树。测试结论表示 RTT 库已在报告所列组合中完成验证，不把该组合限定为用户必须采用的工程配置。
+工程路径由 `tests/NH/config.local.json` 的 `workspace` 或自动加载且不提交的 `tests/HW/config.local.json` 配置；版本化配置不保存某台机器的绝对工程或工具链路径。HW 工具链可由本地配置、`HW_TOOLCHAIN_BIN`/`HW_NM` 环境变量或 `--toolchain-bin`/`--nm` 参数指定，按命令行、环境变量、本地配置、可移植默认值的顺序覆盖。八个外部工程是为 RTT 库提供真实 Make/CMake、MCU 和工具链环境的本地参考工程，不属于本仓库发布物，不要求上传、固定提交或保持干净工作树。测试结论表示 RTT 库已在报告所列组合中完成验证，不把该组合限定为用户必须采用的工程配置。
 
 | MCU | 架构特征 | Make 目标 | CMake 目标 |
 |---|---|---|---|
@@ -49,13 +49,16 @@ HW09 保留为 8 h/24 h、Cache 和长期计数闭环的扩展稳定性项目。
 2. 最终测试开始前，主仓库必须是已记录的干净工作树。八个外部工程只作为本地参考测试环境，其提交、未提交修改和未跟踪配置不作为 NH09、NH10 或 HW 用例的通过条件，也不要求保存或发布完整工程快照。
 3. 外部工程实际使用的 `ARM_SEGGER_RTT` 目录必须解析到候选提交。报告记录实际 MCU/架构、Make/CMake、构建类型、工具链版本和影响 RTT 行为的关键配置；这些信息用于界定已验证组合，不用于固定外部工程基线。
 4. HW runner 从主仓库读取完整 Git SHA，通过 Make/CMake overlay 注入 `HW_TEST_LIBRARY_SHA`。主仓库工作树不干净时标识追加 `-dirty`；这种结果只可用于预回归，不可作为最终发布证据。
+   NH runner 在 `--all` 开始时冻结主仓库完整 Git SHA，正式执行拒绝 dirty 工作树；统一
+   summary 和 NH01-NH12 各自 metadata 均记录该 SHA 与 dirty 状态，并在每个用例开始和
+   结束时确认候选身份未变化。单用例 dirty 结果只可用于预回归。
 5. F042 Make HW08 不输出普通 marker，其固件身份由 runner metadata、随机非零 `run_id`、归档 ELF 哈希和结果结构共同绑定。
 6. 测试必须通过统一 runner 启动。不得直接运行带测试宏的工程 Makefile 代替 HW runner，也不得直接把单个 `run.sh` 的输出作为最终 NH 证据。
 7. Make/CMake HW 测试使用纯 overlay，不修改工程的 `main.c`、中断源码、Makefile、`CMakeLists.txt`、linker script 或 `rtt_cfg.h`。
 8. 每次切换目标、构建类型、profile 或缓冲参数均执行干净构建。同一测试组合开始后，参与该组合的外部工程源码、构建定义和有效配置在组合结束前不得变更；组合之间允许按测试目的使用不同配置。
-9. 任何主仓库产品代码、runner、fixture、计划或验收判据变更都使受影响证据失效。外部工程配置变化只使依赖原配置的未完成组合或比较失效，不追溯否定已完成且证据闭合的组合。
+9. 正式发布证据以候选提交的完整 Git SHA 为最小有效单位，不做跨主仓库提交的影响分析或证据复用。任何主仓库产品代码、runner、fixture、配置、计划或验收判据变更都必须形成新候选提交，并使上一候选的整套 NH/HW 发布证据不能用于新候选；新候选必须完整重跑 NH01-NH12 和第 6 节规定的 HW01-HW08 矩阵。旧证据仍作为其原候选提交的历史记录保留。外部工程配置变化只使依赖原配置的未完成组合或比较失效，不追溯否定已完成且证据闭合的组合。
 10. 自动判定必须检查退出码、结束标识、计数闭环及 Fault/FAIL 禁止项。人工终端观察不能作为唯一结论。
-11. 失败后保留原证据，修正测试设施时记录原因并使用新目录重跑；禁止覆盖或改写原始证据。
+11. 失败后保留原证据，修正测试设施时记录原因并使用新目录验证；禁止覆盖或改写原始证据。开发期间可以只定向重跑相关用例用于诊断或预回归，但测试设施修正提交成为新候选后，仍须按第 9 条完整重跑，定向结果不能替代正式发布矩阵。
 
 ## 4. 环境和证据
 
@@ -84,7 +87,7 @@ TEST_EVIDENCE/
   HW_RUN_<timestamp>/
     HWxx/<target>/<build>/profile-<n>/
     HW06/<target>/<build>/up-size-<n>/profile-0/
-    HW08/<target>/<build>/<implementation-or-resource>/profile-0/
+    HW08/<target>/<build>/<implementation>/profile-0/
 ```
 
 使用 `--evidence-dir PATH` 将同一验收批次写入明确的新目录。`TEST_EVIDENCE/` 默认不提交；发布报告只提交环境、命令、结果、关键有效配置和证据索引。外部工程的 Git 状态可以作为诊断信息记录，但不得单独用于改变用例 PASS/FAIL；不要求归档或提交完整外部工程快照。
@@ -137,6 +140,9 @@ python3 tests/NH/run_nh.py --all \
 - typed-only、typed-float-only 不保留 formatter；M0 默认和 typed 路径不引入整数除法辅助符号。
 - NH10 在临时目录构建实际工程，并在 metadata 中记录测试脚本、工具链、构建环境和证据哈希。
 - 外部工程的本地配置和 dirty 状态不参与资源预算或 PASS/FAIL 判定。资源数据只适用于报告中记录的工具链、架构、构建模式和关键 RTT 配置，用作已验证参考值，不构成用户工程的固定资源保证。
+- 资源门禁全部归 NH10：formatter、typed integer、legacy float fast-off/on、Skip C/ASM
+  分别由 `default/print_string`、`typed`、`legacy_fast_off/on`、`skip_c/asm` 配置测量。
+  这些项目不需要开发板，不得再作为 HW08 build-only 组合重复执行。
 
 ### NH11-NH12 typed 与回归语料
 
@@ -149,7 +155,11 @@ NH01-NH12 必须全部退出 0，且统一 `SUMMARY.md` 中全部为 PASS。
 
 ## 6. HW01-HW08 执行矩阵
 
-固定一块板后，先完成其 Make 目标，再完成 CMake 目标，随后再更换开发板。每次只运行一个 case/profile，失败时保留证据并停止当前目标。
+正式发布必须从主仓库根目录使用版本化矩阵 `tests/HW/release_matrix.json` 和
+`--release-suite` 入口执行。runner 按目标组织 178 个唯一组合、182 次实际运行；MCU 的
+先后顺序属于现场调度，可用 `--mcu-order` 调整，不参与测试判定。固定一块板后完成该板
+全部 Make/CMake 组合，再提示更换开发板；任一组合失败立即停止并保留已有证据。
+单独指定 case/profile 的命令只用于诊断和预回归，不构成完整发布矩阵。
 
 ### 6.1 构建类型和参数
 
@@ -162,18 +172,38 @@ NH01-NH12 必须全部退出 0，且统一 `SUMMARY.md` 中全部为 PASS。
 | HW05 | 不要求 | 全部 8 目标 | `--profile 0..3` |
 | HW06 | 不要求 | 全部 8 目标 | `--up-size 128`、`--up-size 256` |
 | HW07 | 不要求 | 全部 8 目标 | profile 0 |
-| HW08 marker | 不要求 | 除 `f042_make` 外 7 目标 | `--float-fast 0/1` × `--skip-asm 0/1` |
+| HW08 marker | 不要求 | 除 `f042_make` 外 7 目标 | `f042_cmake`：`--float-fast 0/1`、固定 `--skip-asm 0`；其余 6 目标：`--float-fast 0/1` × `--skip-asm 0/1` |
 | HW08 gated | 不适用 | `f042_make` | 默认协议，`--repeat 3` |
 | HW08 qualification | 不适用 | `f411_make` | `--throughput-qualification --repeat 3` |
-| HW08 资源 | build-only | build-only | marker 目标分别执行 `--resource-profile 1..6` |
 
-HW08 资源 profile 固定为：1 formatter、2 typed integer、3 legacy float fast-off、
-4 legacy float fast-on、5 Skip C、6 Skip ASM。资源 profile 自身确定有效实现配置，不与
-`--float-fast` 或 `--skip-asm` 叠加。
-
-Debug 用于确认两类工程的构建、烧录和 RTT 建链；完整功能、边界、吞吐与性能资格线冻结在 Release。F042 Make HW08 协议不接受 marker/resource 参数。
+Debug 用于确认两类工程的构建、烧录和 RTT 建链；完整功能、边界、吞吐与性能资格线冻结在 Release。F042 Make HW08 协议不接受 marker 参数。
 
 ### 6.2 通用命令形式
+
+正式发布命令为：
+
+```sh
+python3 tests/HW/run_hw.py --release-suite \
+  --mcu-order STM32H7B0VB --mcu-order STM32F042G6 \
+  --evidence-dir TEST_EVIDENCE/HW_RELEASE_<candidate>
+```
+
+`--release-suite` 要求主仓库为已提交且干净的候选，拒绝 case/profile/build-only/repeat 等
+手工矩阵覆盖。`--mcu-order` 按参数出现顺序设置优先级，未列出的 MCU 自动追加；它只改变
+运行顺序，不改变矩阵或证据集合。全部运行结束后，入口会自动执行精确证据验收；也可
+独立复核已有证据：
+
+```sh
+python3 tests/HW/run_hw.py \
+  --verify-evidence TEST_EVIDENCE/HW_RELEASE_<candidate>
+```
+
+验收器依据同一版本化矩阵检查 182 个精确路径、每项 `metadata.json` 与 `result.txt`、
+全部参数、每项均为硬件 `PASS`、候选 SHA，以及主仓库和工程内实际库均为干净的
+同一候选提交；任何缺失项或多余项均失败。验证历史候选证据时追加
+`--candidate-sha <完整 SHA>`。
+
+以下单组合形式仅用于失败定位和开发阶段预回归：
 
 ```sh
 python3 tests/HW/run_hw.py \
@@ -181,7 +211,7 @@ python3 tests/HW/run_hw.py \
   --evidence-dir TEST_EVIDENCE/HW_RELEASE_<candidate>
 ```
 
-profile、缓冲和资源参数按 6.1 表追加。F042 Make HW08 正式命令为：
+profile 和缓冲参数按 6.1 表追加。F042 Make HW08 的定向诊断命令为：
 
 ```sh
 python3 tests/HW/run_hw.py \
@@ -189,7 +219,7 @@ python3 tests/HW/run_hw.py \
   --evidence-dir TEST_EVIDENCE/HW_RELEASE_<candidate>
 ```
 
-F411 的 marker HW08 之后还必须执行独立的正式吞吐资格测试：
+F411 正式吞吐资格组合已包含在 `--release-suite` 中；其定向诊断命令为：
 
 ```sh
 python3 tests/HW/run_hw.py \
@@ -209,7 +239,7 @@ python3 tests/HW/run_hw.py \
 | HW05 | bit/modff、compat/fast、随机语料和 46/47 B 标签 | corpus、4 个边界和 40000 次循环全部 PASS，无栈破坏 |
 | HW06 | Up Buffer 临界、突发、无读取窗口和重连 | 11/11 用例 PASS；接受/拒绝闭环；重连后序号推进 |
 | HW07 | 主循环与 TIM1 ISR 六阶段并发 | 6/6 phase PASS；零丢帧；控制块、哨兵和栈有效 |
-| HW08 | 周期、吞吐、资源和栈 | marker 路径 6/6、样本完整；资源构建成功；资格吞吐闭环 |
+| HW08 | 周期、吞吐和运行时栈 | marker 路径 6/6、样本完整；栈保护通过；资格吞吐闭环 |
 
 ### 6.4 HW07/HW08 特殊协议
 
@@ -218,7 +248,7 @@ python3 tests/HW/run_hw.py \
 - H7 HW08 额外通过 ELF 符号内存 gate 启动 16384 个 64 B 帧；目标速率为 0.36 MiB/s，允许误差 1%，目标和主机帧数、序号及 CRC 必须闭环。
 - F042 Make HW08 使用随机非零 `run_id` 和结果结构，发送 8192 个 64 B 帧；目标速率为 0.02 MiB/s，允许误差 1%，三次独立运行均须 PASS。
 - F411 marker HW08 的 2048 帧突发写入只作 `CHARACTERIZATION`，不形成吞吐保证结论。正式资格模式使用随机非零 `run_id`、内存 gate 和结果结构，以 0.10 MiB/s 发送 16384 个带序号和 CRC 的 64 B 帧；目标零拒绝、主机完整捕获且三次独立运行均须 PASS，由此回归冻结的 0.08 MiB/s 保证线。
-- `--build-only` 和非零 `--resource-profile` 只能形成构建/资源结论，不能标记为硬件 PASS。
+- `--build-only` 只能形成构建结论，不能标记为硬件 PASS；资源结论由 NH10 形成。
 
 ## 7. 最终发布关闭条件
 
@@ -227,5 +257,5 @@ python3 tests/HW/run_hw.py \
 3. 四块板、八个工程按第 6 节完成 HW01-HW08，所有必需组合均 PASS。
 4. runner metadata、目标 marker 或 gated 证据均能关联候选 SHA，不存在旧固定 SHA。
 5. 原始证据目录只读保留，最终报告列出环境、命令、矩阵、工具链、关键有效配置、失败尝试、有效重跑及证据索引，并明确外部工程组合属于已验证参考环境而非用户配置限制。
-6. 最终测试后不得修改产品代码、runner、fixture、配置或本计划；如有修改，创建新候选提交并重跑受影响范围。
+6. 最终测试后不得修改主仓库产品代码、runner、fixture、配置或本计划；如有修改，必须创建新候选提交并完整重跑 NH01-NH12 和第 6 节规定的 HW01-HW08 矩阵，不得把上一候选的 PASS 拼接到新候选报告中。
 7. HW09 未执行必须在发布说明中列为已知验证边界，不得宣称已完成长期稳定性测试。

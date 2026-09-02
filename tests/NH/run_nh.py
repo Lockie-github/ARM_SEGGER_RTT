@@ -19,6 +19,12 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_LOCAL_CONFIG = HERE / "config.local.json"
+WORKSPACE_PROJECTS = (
+    "stm32f042g6make", "stm32f042g6cmake",
+    "stm32f103c8make", "stm32f103c8cmake",
+    "stm32f411cemake", "stm32f411cecmake",
+    "stm32h7b0vbmake", "stm32h7b0vbcmake",
+)
 CASES: dict[str, dict[str, Any]] = {
     "NH01": {"script": "tests/NH/cases/NH01/run.sh", "needs": ["host", "arm"]},
     "NH02": {"script": "tests/NH/cases/NH02/run.sh", "needs": ["host"]},
@@ -49,6 +55,81 @@ CASES: dict[str, dict[str, Any]] = {
 
 class NHFailure(RuntimeError):
     pass
+
+
+def git_identity(path: Path) -> tuple[Path, str, bool]:
+    top_level = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if top_level.returncode != 0:
+        raise NHFailure(f"cannot determine the Git worktree root for {path}")
+    worktree = Path(top_level.stdout.strip()).resolve()
+    revision = subprocess.run(
+        ["git", "-C", str(worktree), "rev-parse", "HEAD"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if revision.returncode != 0:
+        raise NHFailure(f"cannot determine the Git revision for {path}")
+    status = subprocess.run(
+        ["git", "-C", str(worktree), "status", "--porcelain", "--untracked-files=normal"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if status.returncode != 0:
+        raise NHFailure(f"cannot determine the Git worktree state for {path}")
+    return worktree, revision.stdout.strip(), bool(status.stdout.strip())
+
+
+def repository_identity() -> tuple[str, bool]:
+    repository_root, repository_sha, source_dirty = git_identity(REPO_ROOT)
+    if repository_root != REPO_ROOT.resolve():
+        raise NHFailure(f"ARM_SEGGER_RTT is not a Git worktree root: {REPO_ROOT}")
+    return repository_sha, source_dirty
+
+
+def require_repository_identity(expected_sha: str, expected_dirty: bool) -> None:
+    current_sha, current_dirty = repository_identity()
+    if (current_sha, current_dirty) != (expected_sha, expected_dirty):
+        raise NHFailure(
+            "ARM_SEGGER_RTT candidate changed after the NH run started: "
+            f"expected {expected_sha} dirty={expected_dirty}, found "
+            f"{current_sha} dirty={current_dirty}"
+        )
+
+
+def validate_workspace_candidate(
+    workspace: Path, expected_sha: str
+) -> list[dict[str, Any]]:
+    identities: list[dict[str, Any]] = []
+    for name in WORKSPACE_PROJECTS:
+        library = (workspace / name / "ARM_SEGGER_RTT").resolve()
+        if not library.is_dir():
+            raise NHFailure(f"{name} ARM_SEGGER_RTT directory does not exist: {library}")
+        worktree, actual_sha, dirty = git_identity(library)
+        if worktree != library:
+            raise NHFailure(
+                f"{name} ARM_SEGGER_RTT is not a standalone Git worktree: {library}"
+            )
+        if actual_sha != expected_sha:
+            raise NHFailure(
+                f"{name} ARM_SEGGER_RTT revision mismatch: expected {expected_sha}, "
+                f"found {actual_sha} at {library}"
+            )
+        if dirty:
+            raise NHFailure(f"{name} ARM_SEGGER_RTT worktree is dirty: {library}")
+        identities.append(
+            {"project": name, "path": str(library), "sha": actual_sha, "dirty": dirty}
+        )
+    return identities
 
 
 def defaults() -> dict[str, Any]:
@@ -231,19 +312,15 @@ def preflight(
 
     workspace = resolve_path(str(config["workspace"]), REPO_ROOT)
     if "workspace" in needs:
-        projects = (
-            "stm32f042g6make", "stm32f042g6cmake",
-            "stm32f103c8make", "stm32f103c8cmake",
-            "stm32f411cemake", "stm32f411cecmake",
-            "stm32h7b0vbmake", "stm32h7b0vbcmake",
-        )
-        missing_projects = [name for name in projects if not (workspace / name).is_dir()]
+        missing_projects = [
+            name for name in WORKSPACE_PROJECTS if not (workspace / name).is_dir()
+        ]
         if missing_projects:
             raise NHFailure(
                 f"{case} workspace is missing projects: {', '.join(missing_projects)}"
             )
         active_hw_files: list[str] = []
-        for name in projects:
+        for name in WORKSPACE_PROJECTS:
             project = workspace / name
             candidates = [project / "rtt_cfg.h"]
             candidates.extend((project / "Core" / "Src").glob("*.c"))
@@ -295,6 +372,8 @@ def run_case(
     config: dict[str, Any],
     evidence_root: Path,
     dry_run: bool,
+    repository_sha: str,
+    source_dirty: bool,
 ) -> bool:
     case_dir = evidence_root / case
     if case_dir.exists() and not dry_run:
@@ -318,17 +397,10 @@ def run_case(
 
     environment = build_environment(config, case, case_dir)
     started = dt.datetime.now().astimezone()
-    try:
-        versions = preflight(case, config, environment)
-    except NHFailure as error:
-        case_dir.mkdir(parents=True)
-        (case_dir / "result.txt").write_text("FAIL\n", encoding="ascii")
-        (case_dir / "preflight-error.txt").write_text(
-            str(error) + "\n", encoding="utf-8"
-        )
-        raise
+    require_repository_identity(repository_sha, source_dirty)
     case_dir.mkdir(parents=True)
     (case_dir / "tmp").mkdir()
+    project_libraries: list[dict[str, Any]] = []
     metadata = {
         "case": case,
         "script": CASES[case]["script"],
@@ -342,8 +414,33 @@ def run_case(
         "cube_cmake": config["cube_cmake"],
         "workspace": str(resolve_path(str(config["workspace"]), REPO_ROOT)),
         "jobs": config["jobs"],
-        "versions": versions,
+        "repository_sha": repository_sha,
+        "source_dirty": source_dirty,
+        "project_libraries": project_libraries,
+        "versions": {},
     }
+    (case_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
+    )
+    try:
+        versions = preflight(case, config, environment)
+        if "workspace" in CASES[case]["needs"]:
+            workspace = resolve_path(str(config["workspace"]), REPO_ROOT)
+            project_libraries = validate_workspace_candidate(workspace, repository_sha)
+    except NHFailure as error:
+        metadata["finished_at"] = dt.datetime.now().astimezone().isoformat()
+        metadata["preflight_error"] = str(error)
+        (case_dir / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+        (case_dir / "result.txt").write_text("FAIL\n", encoding="ascii")
+        (case_dir / "preflight-error.txt").write_text(
+            str(error) + "\n", encoding="utf-8"
+        )
+        raise
+    metadata["project_libraries"] = project_libraries
+    metadata["versions"] = versions
     (case_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
     )
@@ -368,6 +465,19 @@ def run_case(
             log.write(line)
         return_code = process.wait()
 
+    try:
+        require_repository_identity(repository_sha, source_dirty)
+    except NHFailure as error:
+        metadata["finished_at"] = dt.datetime.now().astimezone().isoformat()
+        metadata["return_code"] = return_code
+        metadata["identity_error"] = str(error)
+        (case_dir / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+        (case_dir / "result.txt").write_text("FAIL\n", encoding="ascii")
+        raise
+
     metadata["finished_at"] = dt.datetime.now().astimezone().isoformat()
     metadata["return_code"] = return_code
     (case_dir / "metadata.json").write_text(
@@ -378,12 +488,19 @@ def run_case(
     return return_code == 0
 
 
-def write_summary(evidence_root: Path, results: dict[str, bool]) -> None:
+def write_summary(
+    evidence_root: Path,
+    results: dict[str, bool],
+    repository_sha: str,
+    source_dirty: bool,
+) -> None:
     lines = [
         "# NH Test Summary",
         "",
         f"- Generated: {dt.datetime.now().astimezone().isoformat()}",
         f"- Repository: {REPO_ROOT}",
+        f"- Candidate SHA: {repository_sha}",
+        f"- Source dirty: {'yes' if source_dirty else 'no'}",
         "",
         "| Case | Result |",
         "|---|---|",
@@ -439,6 +556,13 @@ def main() -> int:
     if int(config["jobs"]) < 1:
         raise NHFailure("jobs must be at least 1")
 
+    repository_sha = ""
+    source_dirty = False
+    if not args.dry_run:
+        repository_sha, source_dirty = repository_identity()
+        if args.all and source_dirty:
+            raise NHFailure("--all requires a clean committed candidate")
+
     timestamp = dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     evidence_root = (
         args.evidence_dir.resolve()
@@ -451,7 +575,14 @@ def main() -> int:
     results: dict[str, bool] = {}
     for case in selected:
         try:
-            passed = run_case(case, config, evidence_root, args.dry_run)
+            passed = run_case(
+                case,
+                config,
+                evidence_root,
+                args.dry_run,
+                repository_sha,
+                source_dirty,
+            )
         except NHFailure as error:
             print(f"NH test failed: {error}", file=sys.stderr)
             passed = False
@@ -459,7 +590,7 @@ def main() -> int:
         if not passed and not args.keep_going:
             break
     if not args.dry_run:
-        write_summary(evidence_root, results)
+        write_summary(evidence_root, results, repository_sha, source_dirty)
         print(f"evidence: {evidence_root}")
     return 0 if results and all(results.values()) else 1
 

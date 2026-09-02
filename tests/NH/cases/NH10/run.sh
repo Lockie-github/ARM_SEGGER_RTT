@@ -42,6 +42,7 @@ FAILURES="$EVIDENCE_DIR/failures.txt"
   printf '%s\n' '- Legacy float fast on: Flash <= fast off + 256 B; stack <= fast off + 64 B; RAM unchanged.'
   printf '%s\n' '- Skip ASM: absolute Flash delta versus Skip C <= 256 B; RAM unchanged; M0 remains C-equivalent.'
   printf '%s\n' '- Typed-only and typed-float-only: formatter absent; M0 default/typed: no integer division helper.'
+  printf '%s\n' '- Former HW08 build-only profiles are owned here: formatter=default/print_string, typed integer=typed, legacy float=legacy_fast_off/on, RTT Skip=skip_c/skip_asm.'
   printf '%s\n' '- Actual projects: default and globally forced C both link within target regions with unchanged RAM; Skip ASM delta <= 256 B and RAM unchanged.'
   printf '%s\n' '- Every configuration: three clean ELF builds have identical hashes and dimensions.'
 } >"$EVIDENCE_DIR/budget_freeze.md"

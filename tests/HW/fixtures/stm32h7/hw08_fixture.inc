@@ -5,60 +5,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef HW08_RESOURCE_PROFILE
-#define HW08_RESOURCE_PROFILE 0
-#endif
-
-#if HW08_RESOURCE_PROFILE
-
-uintptr_t __stack_chk_guard = (uintptr_t)UINT32_C(0x6D5A56A9);
-
-unsigned __real_SEGGER_RTT_Write(unsigned BufferIndex,
-                                 const void *pBuffer,
-                                 unsigned NumBytes);
-
-__attribute__((noreturn, no_stack_protector))
-void __stack_chk_fail(void)
-{
-  for (;;) {
-    __NOP();
-  }
-}
-
-unsigned __wrap_SEGGER_RTT_Write(unsigned BufferIndex,
-                                 const void *pBuffer,
-                                 unsigned NumBytes)
-{
-  return __real_SEGGER_RTT_Write(BufferIndex, pBuffer, NumBytes);
-}
-
-static void HW08_Init(void)
-{
-  SEGGER_RTT_Init();
-}
-
-static void HW08_Run(void)
-{
-#if HW08_RESOURCE_PROFILE == 1
-  (void)SEGGER_RTT_printf(RTT_LOG_BUFFER_INDEX, "%s: %d\n",
-                          "i32", (int)INT32_MIN);
-#elif HW08_RESOURCE_PROFILE == 2
-  (void)RTT_LogI32("i32", INT32_MIN);
-#elif HW08_RESOURCE_PROFILE == 3 || HW08_RESOURCE_PROFILE == 4
-  RTT_LogFloat3(-4294967040.0f,
-    "1234567890123456789012345678901234567890123456");
-#elif HW08_RESOURCE_PROFILE == 5 || HW08_RESOURCE_PROFILE == 6
-  static const char Payload[48] =
-    "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
-  (void)SEGGER_RTT_WriteNoLock(RTT_LOG_BUFFER_INDEX,
-                               Payload, sizeof(Payload));
-#else
-#error "unsupported HW08_RESOURCE_PROFILE"
-#endif
-}
-
-#else
-
 #define HW08_SAMPLE_COUNT       1024u
 #define HW08_WARMUP_COUNT       256u
 #define HW08_TEST_BUFFER_SIZE   256u
@@ -467,5 +413,3 @@ static void HW08_Run(void)
     (StackUsed < (1024u - 128u)) ? "PASS" : "FAIL",
     Passed ? "PASS" : "FAIL");
 }
-
-#endif

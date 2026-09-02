@@ -7,6 +7,7 @@ import argparse
 import collections
 import datetime as dt
 import glob
+import itertools
 import json
 import os
 from pathlib import Path
@@ -25,41 +26,98 @@ import zlib
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_CONFIG = HERE / "targets.json"
+DEFAULT_LOCAL_CONFIG = HERE / "config.local.json"
+DEFAULT_RELEASE_MATRIX = HERE / "release_matrix.json"
 CASES = tuple(f"HW{number:02d}" for number in range(1, 9))
 JLINK_FAILURE_PATTERNS = (
     "Cannot connect to J-Link",
     "Cannot connect to target",
+    "Could not find emulator with serial number",
+    "No emulator with serial number",
     "No J-Link device found",
     "No emulator connected",
 )
+LOCAL_DEFAULT_FIELDS = frozenset(("toolchain_bin", "nm"))
+LOCAL_TARGET_FIELDS = frozenset(("project_dir", "toolchain_bin", "nm"))
 
 
 class TestFailure(RuntimeError):
     pass
 
 
-def source_identity() -> tuple[str, bool]:
+def git_identity(path: Path) -> tuple[Path, str, bool]:
+    top_level = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if top_level.returncode != 0:
+        raise TestFailure(f"cannot determine the Git worktree root for {path}")
+    worktree = Path(top_level.stdout.strip()).resolve()
     revision = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        ["git", "-C", str(worktree), "rev-parse", "HEAD"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         check=False,
     )
     if revision.returncode != 0:
-        raise TestFailure("cannot determine the ARM_SEGGER_RTT Git revision")
+        raise TestFailure(f"cannot determine the Git revision for {path}")
     status = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=normal"],
+        ["git", "-C", str(worktree), "status", "--porcelain", "--untracked-files=normal"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         check=False,
     )
     if status.returncode != 0:
-        raise TestFailure("cannot determine the ARM_SEGGER_RTT worktree state")
-    dirty = bool(status.stdout.strip())
-    identity = revision.stdout.strip() + ("-dirty" if dirty else "")
+        raise TestFailure(f"cannot determine the Git worktree state for {path}")
+    return worktree, revision.stdout.strip(), bool(status.stdout.strip())
+
+
+def source_identity() -> tuple[str, bool]:
+    worktree, revision, dirty = git_identity(REPO_ROOT)
+    if worktree != REPO_ROOT.resolve():
+        raise TestFailure(f"ARM_SEGGER_RTT is not a Git worktree root: {REPO_ROOT}")
+    identity = revision + ("-dirty" if dirty else "")
     return identity, dirty
+
+
+def validate_project_library(
+    project: Path, expected_sha: str, source_dirty: bool
+) -> tuple[Path, str, bool]:
+    library = (project / "ARM_SEGGER_RTT").resolve()
+    if not library.is_dir():
+        raise TestFailure(f"project ARM_SEGGER_RTT directory does not exist: {library}")
+    worktree, actual_sha, actual_dirty = git_identity(library)
+    if worktree != library:
+        raise TestFailure(
+            f"project ARM_SEGGER_RTT is not a standalone Git worktree: {library}"
+        )
+    candidate_sha = (
+        expected_sha[:-6]
+        if source_dirty and expected_sha.endswith("-dirty")
+        else expected_sha
+    )
+    if actual_sha != candidate_sha:
+        raise TestFailure(
+            f"project ARM_SEGGER_RTT revision mismatch: expected {candidate_sha}, "
+            f"found {actual_sha} at {library}"
+        )
+    same_checkout = worktree == REPO_ROOT.resolve()
+    if not same_checkout and (source_dirty or actual_dirty):
+        states = []
+        if source_dirty:
+            states.append("runner repository is dirty")
+        if actual_dirty:
+            states.append("project library is dirty")
+        raise TestFailure(
+            f"separate project ARM_SEGGER_RTT checkout cannot validate a dirty "
+            f"development candidate ({', '.join(states)}): {library}"
+        )
+    return library, actual_sha, actual_dirty
 
 
 def load_config(path: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
@@ -74,8 +132,70 @@ def load_config(path: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     return defaults, targets
 
 
+def merge_local_config(
+    defaults: dict[str, Any],
+    targets: dict[str, dict[str, Any]],
+    path: Path,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    with path.open(encoding="utf-8") as stream:
+        document = json.load(stream)
+    if document.get("schema_version", 1) != 1:
+        raise TestFailure(
+            f"unsupported local config schema: {document.get('schema_version')!r}"
+        )
+    unknown_top_level = sorted(set(document) - {"schema_version", "defaults", "targets"})
+    if unknown_top_level:
+        raise TestFailure(
+            "local config has unsupported top-level fields: "
+            + ", ".join(unknown_top_level)
+        )
+    unknown_defaults = sorted(
+        set(document.get("defaults", {})) - LOCAL_DEFAULT_FIELDS
+    )
+    if unknown_defaults:
+        raise TestFailure(
+            "local config defaults may only override machine paths; unsupported: "
+            + ", ".join(unknown_defaults)
+        )
+    unknown = sorted(set(document.get("targets", {})) - set(targets))
+    if unknown:
+        raise TestFailure("local config has unknown targets: " + ", ".join(unknown))
+    for name, override in document.get("targets", {}).items():
+        unsupported = sorted(set(override) - LOCAL_TARGET_FIELDS)
+        if unsupported:
+            raise TestFailure(
+                f"local config target {name} may only override machine paths; "
+                "unsupported: " + ", ".join(unsupported)
+            )
+    merged_defaults = {**defaults, **document.get("defaults", {})}
+    merged_targets = {
+        name: {**target, **document.get("targets", {}).get(name, {})}
+        for name, target in targets.items()
+    }
+    return merged_defaults, merged_targets
+
+
 def merged_target(defaults: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
     return {**defaults, **target}
+
+
+def apply_machine_overrides(
+    targets: dict[str, dict[str, Any]],
+    toolchain_bin: str | None,
+    nm: str | None,
+    environment: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    effective_toolchain_bin = toolchain_bin or environment.get("HW_TOOLCHAIN_BIN")
+    effective_nm = nm or environment.get("HW_NM")
+    if effective_toolchain_bin is None and effective_nm is None:
+        return targets
+    overridden = {name: dict(target) for name, target in targets.items()}
+    for target in overridden.values():
+        if effective_toolchain_bin is not None:
+            target["toolchain_bin"] = effective_toolchain_bin
+        if effective_nm is not None:
+            target["nm"] = effective_nm
+    return overridden
 
 
 def locate_cube_cmake() -> Path:
@@ -152,7 +272,6 @@ def cmake_build_commands(build_type: str) -> list[list[str]]:
             "-DHW_TEST_LIBRARY_SHA={library_sha}",
             "-DHW08_FLOAT_FAST={float_fast}",
             "-DHW08_SKIP_ASM={skip_asm}",
-            "-DHW08_RESOURCE_PROFILE={resource_profile}",
             "-DHW08_GATED_THROUGHPUT={gated_throughput}",
             "-DHW08_TP_RUN_ID={run_id}",
             "-DHW08_TP_BASE_TICKS={tp_base_ticks}",
@@ -680,14 +799,16 @@ def locate_symbol(
     target: dict[str, Any],
     evidence: Path,
     symbol_name: str | None = None,
+    environment: dict[str, str] | None = None,
 ) -> int:
-    nm = target.get("nm") or str(Path(target["toolchain_bin"]) / "arm-none-eabi-nm")
+    nm = target.get("nm", "arm-none-eabi-nm")
     result = subprocess.run(
         [nm, str(elf)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         check=False,
+        env=environment,
     )
     (evidence / "symbols.txt").write_text(result.stdout, encoding="utf-8")
     if result.returncode != 0:
@@ -715,6 +836,66 @@ def jlink_command(target: dict[str, Any], probe_serial: str | None) -> list[str]
     if probe_serial:
         command.extend(["-SelectEmuBySN", probe_serial])
     return command
+
+
+def flash_elf(
+    elf: Path,
+    target: dict[str, Any],
+    log_path: Path,
+    probe_serial: str,
+) -> None:
+    command = jlink_command(target, probe_serial)
+    script = f'connect\nloadfile "{elf}"\nr\ng\nqc\n'
+    result = subprocess.run(
+        command,
+        input=script,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    log_path.write_text(
+        f"$ {command_text(command)}\n{result.stdout}", encoding="utf-8"
+    )
+    if result.returncode != 0:
+        raise TestFailure(f"J-Link flash failed with status {result.returncode}")
+    require_no_log_failure(log_path, "flash")
+    download = result.stdout.rfind("Downloading file [")
+    if download < 0 or "O.K." not in result.stdout[download:]:
+        raise TestFailure(f"J-Link did not confirm the ELF download; see {log_path}")
+
+
+def run_flash(
+    target: dict[str, Any],
+    build_type: str,
+    project: Path,
+    log_path: Path,
+    values: dict[str, Any],
+    environment: dict[str, str],
+    probe_serial: str | None,
+    elf: Path | None,
+    dry_run: bool,
+) -> None:
+    if probe_serial:
+        if dry_run:
+            command = jlink_command(target, probe_serial)
+            print(
+                f"$ {command_text(command)}  # load built ELF matching "
+                f"{target.get('elf', '*.elf')}"
+            )
+            return
+        if elf is None:
+            raise TestFailure("runner-controlled flash requires a built ELF")
+        flash_elf(elf, target, log_path, probe_serial)
+        return
+    run_commands(
+        target["flash"][build_type],
+        project,
+        log_path,
+        values,
+        environment,
+        dry_run,
+    )
 
 
 def read_target_result(
@@ -950,16 +1131,18 @@ def archive_artifacts(project: Path, target: dict[str, Any], evidence: Path, val
         raise TestFailure("build produced no configured artifacts")
 
 
-def resolve_hw08_options(
-    resource_profile: int, float_fast: int, skip_asm: int
-) -> tuple[int, int]:
-    if resource_profile == 0:
-        return float_fast, skip_asm
-    if float_fast or skip_asm:
+def validate_hw08_target_options(
+    name: str,
+    target: dict[str, Any],
+    case: str,
+    skip_asm: int,
+) -> None:
+    if case != "HW08" or target["mcu"] != "STM32F042G6":
+        return
+    if skip_asm:
         raise TestFailure(
-            "HW08 resource profiles select their own float/Skip implementation"
+            f"{name} Cortex-M0 does not support HW08 --skip-asm 1; use Skip C"
         )
-    return (1 if resource_profile == 4 else 0, 1 if resource_profile == 6 else 0)
 
 
 def evidence_variant(
@@ -968,7 +1151,6 @@ def evidence_variant(
     up_size: int,
     float_fast: int,
     skip_asm: int,
-    resource_profile: int,
     protocol: str,
     throughput_qualification: bool,
 ) -> Path:
@@ -977,11 +1159,268 @@ def evidence_variant(
     profile_leaf = Path(f"profile-{profile}")
     if case == "HW06":
         return Path(f"up-size-{up_size}") / profile_leaf
-    if case == "HW08" and resource_profile:
-        return Path(f"resource-profile-{resource_profile}") / profile_leaf
     if case == "HW08" and protocol == "marker":
         return Path(f"float-fast-{float_fast}_skip-asm-{skip_asm}") / profile_leaf
     return profile_leaf
+
+
+def load_release_matrix(
+    path: Path, targets: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    with path.open(encoding="utf-8") as stream:
+        document = json.load(stream)
+    if document.get("schema_version") != 1:
+        raise TestFailure(
+            f"unsupported release matrix schema: {document.get('schema_version')!r}"
+        )
+    target_order = tuple(targets)
+    combinations: list[dict[str, Any]] = []
+    for entry in document.get("entries", []):
+        case = entry.get("case")
+        if case not in CASES:
+            raise TestFailure(f"release matrix has invalid case: {case!r}")
+        if entry.get("build_only", False):
+            raise TestFailure(
+                "release matrix cannot contain build-only combinations; "
+                "non-hardware resource checks belong to NH10"
+            )
+        selected = target_order if entry.get("targets") == "all" else tuple(
+            entry.get("targets", [])
+        )
+        unknown = sorted(set(selected) - set(targets))
+        if unknown:
+            raise TestFailure(
+                "release matrix has unknown targets: " + ", ".join(unknown)
+            )
+        dimensions = (
+            selected,
+            tuple(entry.get("build_types", ["release"])),
+            tuple(entry.get("profiles", [0])),
+            tuple(entry.get("up_sizes", [256])),
+            tuple(entry.get("float_fast", [0])),
+            tuple(entry.get("skip_asm", [0])),
+        )
+        repeat = int(entry.get("repeat", 1))
+        if repeat < 1:
+            raise TestFailure("release matrix repeat must be at least 1")
+        for (
+            target_name,
+            build_type,
+            profile,
+            up_size,
+            float_fast,
+            skip_asm,
+        ) in itertools.product(*dimensions):
+            if build_type not in ("debug", "release"):
+                raise TestFailure(
+                    f"release matrix has invalid build type: {build_type!r}"
+                )
+            validate_hw08_target_options(
+                str(target_name),
+                targets[str(target_name)],
+                str(case),
+                int(skip_asm),
+            )
+            combinations.append(
+                {
+                    "target": str(target_name),
+                    "case": str(case),
+                    "build_type": str(build_type),
+                    "profile": int(profile),
+                    "up_size": int(up_size),
+                    "float_fast": int(float_fast),
+                    "skip_asm": int(skip_asm),
+                    "build_only": bool(entry.get("build_only", False)),
+                    "throughput_qualification": bool(
+                        entry.get("throughput_qualification", False)
+                    ),
+                    "repeat": repeat,
+                }
+            )
+    if not combinations:
+        raise TestFailure("release matrix has no combinations")
+    target_index = {name: index for index, name in enumerate(target_order)}
+    combinations.sort(
+        key=lambda item: (
+            target_index[item["target"]],
+            int(item["case"][2:]),
+            0 if item["build_type"] == "debug" else 1,
+            item["profile"],
+            item["up_size"],
+            item["float_fast"],
+            item["skip_asm"],
+            item["throughput_qualification"],
+        )
+    )
+    expected_paths: set[Path] = set()
+    for combination in combinations:
+        for repetition in range(1, combination["repeat"] + 1):
+            path = release_evidence_path(
+                combination, targets[combination["target"]], repetition
+            )
+            if path in expected_paths:
+                raise TestFailure(f"duplicate release matrix combination: {path}")
+            expected_paths.add(path)
+    return combinations
+
+
+def release_evidence_path(
+    combination: dict[str, Any], target: dict[str, Any], repetition: int
+) -> Path:
+    case = combination["case"]
+    protocol = (
+        target.get("hw08_qualification_protocol")
+        if combination["throughput_qualification"]
+        else target.get("hw08_protocol", "marker") if case == "HW08"
+        else "marker"
+    )
+    path = Path(case) / combination["target"] / combination["build_type"]
+    path /= evidence_variant(
+        case,
+        combination["profile"],
+        combination["up_size"],
+        combination["float_fast"],
+        combination["skip_asm"],
+        str(protocol),
+        combination["throughput_qualification"],
+    )
+    if combination["repeat"] > 1:
+        path /= f"run-{repetition}"
+    return path
+
+
+def order_release_combinations(
+    combinations: list[dict[str, Any]],
+    targets: dict[str, dict[str, Any]],
+    requested_mcus: list[str],
+) -> list[dict[str, Any]]:
+    configured_mcus = list(
+        dict.fromkeys(str(target["mcu"]) for target in targets.values())
+    )
+    duplicates = sorted(
+        mcu for mcu, count in collections.Counter(requested_mcus).items() if count > 1
+    )
+    if duplicates:
+        raise TestFailure("duplicate --mcu-order values: " + ", ".join(duplicates))
+    unknown = sorted(set(requested_mcus) - set(configured_mcus))
+    if unknown:
+        raise TestFailure("unknown --mcu-order values: " + ", ".join(unknown))
+    mcu_order = requested_mcus + [
+        mcu for mcu in configured_mcus if mcu not in requested_mcus
+    ]
+    target_order = list(targets)
+    combination_order = {id(item): index for index, item in enumerate(combinations)}
+    return sorted(
+        combinations,
+        key=lambda item: (
+            mcu_order.index(str(targets[item["target"]]["mcu"])),
+            target_order.index(item["target"]),
+            combination_order[id(item)],
+        ),
+    )
+
+
+def verify_release_evidence(
+    evidence_root: Path,
+    combinations: list[dict[str, Any]],
+    targets: dict[str, dict[str, Any]],
+    candidate_sha: str,
+) -> int:
+    if not evidence_root.is_dir():
+        raise TestFailure(f"evidence directory does not exist: {evidence_root}")
+    expected: dict[Path, tuple[dict[str, Any], int]] = {}
+    for combination in combinations:
+        for repetition in range(1, combination["repeat"] + 1):
+            path = release_evidence_path(
+                combination, targets[combination["target"]], repetition
+            )
+            expected[path] = (combination, repetition)
+
+    actual_metadata = {
+        path.parent.relative_to(evidence_root)
+        for path in evidence_root.rglob("metadata.json")
+    }
+    actual_results = {
+        path.parent.relative_to(evidence_root)
+        for path in evidence_root.rglob("result.txt")
+    }
+    expected_paths = set(expected)
+    errors = [
+        f"missing combination: {path}"
+        for path in sorted(expected_paths - actual_metadata)
+    ]
+    errors.extend(
+        f"extra combination metadata: {path}"
+        for path in sorted(actual_metadata - expected_paths)
+    )
+    errors.extend(
+        f"missing result: {path}"
+        for path in sorted(expected_paths - actual_results)
+    )
+    errors.extend(
+        f"extra result: {path}"
+        for path in sorted(actual_results - expected_paths)
+    )
+
+    for path in sorted(expected_paths & actual_metadata & actual_results):
+        combination, repetition = expected[path]
+        try:
+            metadata = json.loads(
+                (evidence_root / path / "metadata.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as error:
+            errors.append(f"invalid metadata {path}: {error}")
+            continue
+        target = targets[combination["target"]]
+        protocol = (
+            target.get("hw08_qualification_protocol")
+            if combination["throughput_qualification"]
+            else target.get("hw08_protocol", "marker")
+            if combination["case"] == "HW08"
+            else "marker"
+        )
+        expected_metadata = {
+            "target": combination["target"],
+            "case": combination["case"],
+            "build_type": combination["build_type"],
+            "profile": combination["profile"],
+            "up_size": combination["up_size"],
+            "float_fast": combination["float_fast"],
+            "skip_asm": combination["skip_asm"],
+            "build_only": combination["build_only"],
+            "throughput_qualification": combination["throughput_qualification"],
+            "protocol": protocol,
+            "repetition": repetition,
+            "library_sha": candidate_sha,
+            "source_dirty": False,
+            "actual_library_sha": candidate_sha,
+            "actual_library_dirty": False,
+        }
+        for field, value in expected_metadata.items():
+            if metadata.get(field) != value:
+                errors.append(
+                    f"metadata mismatch {path}: {field} expected {value!r}, "
+                    f"found {metadata.get(field)!r}"
+                )
+        expected_result = "BUILD PASS\n" if combination["build_only"] else "PASS\n"
+        try:
+            actual_result = (evidence_root / path / "result.txt").read_text(
+                encoding="ascii"
+            )
+        except OSError as error:
+            errors.append(f"cannot read result {path}: {error}")
+        else:
+            if actual_result != expected_result:
+                errors.append(
+                    f"result mismatch {path}: expected {expected_result.strip()!r}, "
+                    f"found {actual_result.strip()!r}"
+                )
+    if errors:
+        display = errors[:20]
+        if len(errors) > len(display):
+            display.append(f"... and {len(errors) - len(display)} more errors")
+        raise TestFailure("release evidence verification failed:\n" + "\n".join(display))
+    return len(expected_paths)
 
 
 def run_target(
@@ -1000,7 +1439,6 @@ def run_target(
     up_size: int,
     float_fast: int,
     skip_asm: int,
-    resource_profile: int,
     throughput_qualification: bool,
     library_sha: str,
     source_dirty: bool,
@@ -1008,6 +1446,10 @@ def run_target(
     project = (REPO_ROOT / target["project_dir"]).resolve()
     if not project.is_dir():
         raise TestFailure(f"project does not exist: {project}")
+    validate_hw08_target_options(name, target, case, skip_asm)
+    actual_library, actual_library_sha, actual_library_dirty = validate_project_library(
+        project, library_sha, source_dirty
+    )
     configured_build_types = tuple(target.get("build", {}))
     if build_type not in configured_build_types:
         raise TestFailure(
@@ -1040,7 +1482,6 @@ def run_target(
         up_size,
         float_fast,
         skip_asm,
-        resource_profile,
         protocol,
         throughput_qualification,
     )
@@ -1060,7 +1501,6 @@ def run_target(
         "library_sha": library_sha,
         "float_fast": float_fast,
         "skip_asm": skip_asm,
-        "resource_profile": resource_profile,
         "gated_throughput": 1 if protocol == "gated-throughput" else 0,
         "run_id": run_id,
         "tp_base_ticks": target.get("tp_base_ticks", 0),
@@ -1069,10 +1509,15 @@ def run_target(
         "tp_remainder_denom": target.get("tp_remainder_denom", 1),
     }
     environment = os.environ.copy()
-    toolchain_bin = Path(target["toolchain_bin"])
-    if not toolchain_bin.is_dir():
-        raise TestFailure(f"toolchain directory does not exist: {toolchain_bin}")
-    environment["PATH"] = str(toolchain_bin) + os.pathsep + environment.get("PATH", "")
+    configured_toolchain_bin = str(target.get("toolchain_bin", ""))
+    toolchain_bin: Path | None = None
+    if configured_toolchain_bin:
+        toolchain_bin = Path(configured_toolchain_bin).expanduser().resolve()
+        if not toolchain_bin.is_dir():
+            raise TestFailure(f"toolchain directory does not exist: {toolchain_bin}")
+        environment["PATH"] = (
+            str(toolchain_bin) + os.pathsep + environment.get("PATH", "")
+        )
     build_commands = target["build"][build_type]
     if target["build_system"] == "cmake":
         cube_cmake = locate_cube_cmake()
@@ -1100,7 +1545,6 @@ def run_target(
             "HW08_GATED_THROUGHPUT": "1" if protocol == "gated-throughput" else "0",
             "HW08_FLOAT_FAST": str(float_fast),
             "HW08_SKIP_ASM": str(skip_asm),
-            "HW08_RESOURCE_PROFILE": str(resource_profile),
             "HW08_TP_RUN_ID": str(run_id),
             "HW08_TP_BASE_TICKS": str(target.get("tp_base_ticks", 0)),
             "HW08_TP_BASE_CYCLES": str(target.get("tp_base_cycles", 0)),
@@ -1114,10 +1558,24 @@ def run_target(
         if protocol == "gated-throughput":
             print(f"$ {target['nm']} {target['elf']}  # locate {target['result_symbol']}")
         if not build_only:
-            run_commands(target["flash"][build_type], project, evidence / "flash.log", values, environment, True)
+            run_flash(
+                target,
+                build_type,
+                project,
+                evidence / "flash.log",
+                values,
+                environment,
+                probe_serial,
+                None,
+                True,
+            )
+            probe_option = (
+                f" -SelectEmuBySN {probe_serial}" if probe_serial else ""
+            )
             print(
                 f"$ JLinkExe -Device {target['mcu']} -if SWD "
-                f"-Speed {target['jlink_speed']} -RTTTelnetPort {target['rtt_port']} ..."
+                f"-Speed {target['jlink_speed']} -RTTTelnetPort {target['rtt_port']}"
+                f"{probe_option} ..."
             )
             print(f"$ JLinkRTTClient -RTTTelnetPort {target['rtt_port']} -LocalEcho Off")
             if protocol == "gated-throughput":
@@ -1137,8 +1595,8 @@ def run_target(
         "wrap_printf": case == "HW05",
         "float_fast": float_fast,
         "skip_asm": skip_asm,
-        "resource_profile": resource_profile,
         "protocol": protocol,
+        "build_only": build_only,
         "throughput_qualification": throughput_qualification,
         "repetition": repetition,
         "hw07_start_gate": target.get("hw07_start_gate") if case == "HW07" else None,
@@ -1152,6 +1610,17 @@ def run_target(
         "started_at": dt.datetime.now().astimezone().isoformat(),
         "library_sha": library_sha,
         "source_dirty": source_dirty,
+        "actual_library_path": str(actual_library),
+        "actual_library_sha": actual_library_sha,
+        "actual_library_dirty": actual_library_dirty,
+        "probe_serial": probe_serial,
+        "flash_method": (
+            "not_run" if build_only
+            else "runner_jlink" if probe_serial
+            else "project"
+        ),
+        "toolchain_bin": str(toolchain_bin) if toolchain_bin else None,
+        "nm": target.get("nm", "arm-none-eabi-nm"),
     }
     if protocol == "gated-throughput":
         metadata["run_id"] = run_id
@@ -1163,14 +1632,15 @@ def run_target(
     result_address: int | None = None
     marker_gate_address: int | None = None
     entry_address: int | None = None
+    elf = find_elf(project, target, build_type)
     entry_address = locate_symbol(
-        find_elf(project, target, build_type), target, evidence, "HW_TestEntry"
+        elf, target, evidence, "HW_TestEntry", environment
     )
     if build_only:
         (evidence / "result.txt").write_text("BUILD PASS\n", encoding="ascii")
         return
     if protocol == "gated-throughput":
-        result_address = locate_symbol(find_elf(project, target, build_type), target, evidence)
+        result_address = locate_symbol(elf, target, evidence, environment=environment)
         (evidence / "gate.json").write_text(
             json.dumps(
                 {"run_id": run_id, "result_address": result_address},
@@ -1181,8 +1651,9 @@ def run_target(
         )
     elif case == "HW08" and target.get("hw08_gate_symbol"):
         marker_gate_address = locate_symbol(
-            find_elf(project, target, build_type), target, evidence,
+            elf, target, evidence,
             str(target["hw08_gate_symbol"]),
+            environment,
         )
         (evidence / "gate.json").write_text(
             json.dumps(
@@ -1197,8 +1668,17 @@ def run_target(
             encoding="utf-8",
         )
     flash_log = evidence / "flash.log"
-    run_commands(target["flash"][build_type], project, flash_log, values, environment, False)
-    require_no_log_failure(flash_log, "flash")
+    run_flash(
+        target,
+        build_type,
+        project,
+        flash_log,
+        values,
+        environment,
+        probe_serial,
+        elf,
+        False,
+    )
     if protocol == "marker":
         if case == "HW01":
             marker = f"HW-01|{target['mcu']}|"
@@ -1308,6 +1788,16 @@ def parse_args() -> argparse.Namespace:
     selection.add_argument("--target", action="append", help="target name; repeatable")
     selection.add_argument("--mcu", help="run both Make and CMake projects for one MCU")
     selection.add_argument("--all", action="store_true", help="run every configured target")
+    selection.add_argument(
+        "--release-suite",
+        action="store_true",
+        help="run the complete versioned HW release matrix",
+    )
+    selection.add_argument(
+        "--verify-evidence",
+        type=Path,
+        help="verify exact release-matrix evidence without accessing hardware",
+    )
     parser.add_argument("--list", action="store_true", help="list configured targets")
     parser.add_argument("--build-type", choices=("debug", "release"), default="release")
     parser.add_argument("--case", choices=CASES, default="HW08", help="HW01 through HW08")
@@ -1315,10 +1805,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--up-size", type=int, default=256, help="HW06 test up-buffer size")
     parser.add_argument("--float-fast", type=int, choices=(0, 1), default=0, help="HW08 legacy float path")
     parser.add_argument("--skip-asm", type=int, choices=(0, 1), default=0, help="HW08 Skip implementation")
-    parser.add_argument("--resource-profile", type=int, choices=range(0, 7), default=0, help="HW08 resource-only profile")
     parser.add_argument("--build-only", action="store_true", help="stop after build and archive")
     parser.add_argument("--dry-run", action="store_true", help="validate and print commands only")
     parser.add_argument("--yes", action="store_true", help="do not prompt when changing MCU")
+    parser.add_argument(
+        "--mcu-order",
+        action="append",
+        default=[],
+        metavar="MCU",
+        help=(
+            "release-suite MCU priority; repeat in desired order, with omitted MCUs "
+            "appended automatically"
+        ),
+    )
     parser.add_argument("--jobs", type=int, default=max(1, os.cpu_count() or 1))
     parser.add_argument("--repeat", type=int, default=1, help="repeat each selected target")
     parser.add_argument(
@@ -1328,6 +1827,20 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--probe-serial", help="J-Link serial number")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--local-config",
+        type=Path,
+        help="machine-local overrides; defaults to tests/HW/config.local.json",
+    )
+    parser.add_argument("--toolchain-bin", help="Arm GNU Toolchain bin directory")
+    parser.add_argument("--nm", help="arm-none-eabi-nm command or absolute path")
+    parser.add_argument(
+        "--release-matrix", type=Path, default=DEFAULT_RELEASE_MATRIX
+    )
+    parser.add_argument(
+        "--candidate-sha",
+        help="candidate SHA for historical --verify-evidence; defaults to current HEAD",
+    )
     parser.add_argument("--evidence-dir", type=Path)
     project_selection = parser.add_mutually_exclusive_group()
     project_selection.add_argument(
@@ -1347,7 +1860,42 @@ def main() -> int:
     args = parse_args()
     try:
         defaults, configured = load_config(args.config.resolve())
+        local_config = (
+            args.local_config.expanduser().resolve()
+            if args.local_config
+            else DEFAULT_LOCAL_CONFIG if DEFAULT_LOCAL_CONFIG.is_file()
+            else None
+        )
+        if local_config is not None:
+            defaults, configured = merge_local_config(
+                defaults, configured, local_config
+            )
         targets = {name: merged_target(defaults, item) for name, item in configured.items()}
+        targets = apply_machine_overrides(
+            targets, args.toolchain_bin, args.nm, os.environ
+        )
+        if args.mcu_order and not args.release_suite:
+            raise TestFailure("--mcu-order requires --release-suite")
+        if args.verify_evidence is not None:
+            combinations = load_release_matrix(args.release_matrix.resolve(), targets)
+            _, current_sha, current_dirty = git_identity(REPO_ROOT)
+            if args.candidate_sha is None and current_dirty:
+                raise TestFailure(
+                    "current repository is dirty; commit it or provide --candidate-sha "
+                    "to verify historical evidence"
+                )
+            candidate_sha = args.candidate_sha or current_sha
+            count = verify_release_evidence(
+                args.verify_evidence.expanduser().resolve(),
+                combinations,
+                targets,
+                candidate_sha,
+            )
+            print(
+                f"release evidence PASS: {count} exact runs for candidate "
+                f"{candidate_sha}"
+            )
+            return 0
         if args.list:
             for name, target in targets.items():
                 qualification = (
@@ -1360,6 +1908,88 @@ def main() -> int:
                     f"HW01-HW08 (HW08: {target.get('hw08_protocol', 'marker')}"
                     f"{qualification})"
                 )
+            return 0
+        if args.release_suite:
+            forbidden = (
+                "--build-type", "--case", "--profile", "--up-size",
+                "--float-fast", "--skip-asm",
+                "--build-only", "--repeat", "--throughput-qualification",
+                "--local", "--project-dir", "--candidate-sha",
+                "--config", "--release-matrix",
+            )
+            supplied = [
+                option for option in forbidden
+                if any(
+                    argument == option or argument.startswith(option + "=")
+                    for argument in sys.argv[1:]
+                )
+            ]
+            if supplied:
+                raise TestFailure(
+                    "--release-suite uses the frozen release matrix; remove: "
+                    + ", ".join(supplied)
+                )
+            combinations = load_release_matrix(args.release_matrix.resolve(), targets)
+            combinations = order_release_combinations(
+                combinations, targets, args.mcu_order
+            )
+            library_sha, source_dirty = source_identity()
+            if source_dirty:
+                raise TestFailure(
+                    "--release-suite requires a clean committed candidate"
+                )
+            stamp = dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+            evidence_root = (
+                args.evidence_dir
+                or REPO_ROOT / "TEST_EVIDENCE" / f"HW_RELEASE_{stamp}"
+            ).expanduser().resolve()
+            previous_mcu: str | None = None
+            total_runs = sum(item["repeat"] for item in combinations)
+            run_number = 0
+            for combination in combinations:
+                name = combination["target"]
+                target = targets[name]
+                mcu = target["mcu"]
+                if (
+                    previous_mcu != mcu
+                    and not args.yes
+                    and not args.dry_run
+                    and not combination["build_only"]
+                ):
+                    input(f"Connect {mcu} and press Enter to run {name}: ")
+                for repetition in range(1, combination["repeat"] + 1):
+                    run_number += 1
+                    print(
+                        f"==> release {run_number}/{total_runs}: {name} "
+                        f"{combination['case']} {combination['build_type']}"
+                    )
+                    run_target(
+                        name,
+                        target,
+                        combination["build_type"],
+                        evidence_root,
+                        args.jobs,
+                        args.probe_serial,
+                        args.dry_run,
+                        combination["build_only"],
+                        repetition,
+                        combination["repeat"] > 1,
+                        combination["case"],
+                        combination["profile"],
+                        combination["up_size"],
+                        combination["float_fast"],
+                        combination["skip_asm"],
+                        combination["throughput_qualification"],
+                        library_sha,
+                        source_dirty,
+                    )
+                previous_mcu = mcu
+            if not args.dry_run:
+                verified = verify_release_evidence(
+                    evidence_root, combinations, targets, library_sha
+                )
+                print(f"release evidence PASS: {verified} exact runs")
+            print(f"evidence: {evidence_root}")
             return 0
         if args.target:
             unknown = sorted(set(args.target) - set(targets))
@@ -1403,17 +2033,19 @@ def main() -> int:
         if args.case not in profile_limits and args.profile != 0:
             raise TestFailure(f"{args.case} does not define numeric profiles")
         if args.case != "HW08" and (
-            args.float_fast or args.skip_asm or args.resource_profile
+            args.float_fast or args.skip_asm
             or args.throughput_qualification
         ):
             raise TestFailure("HW08-specific options require --case HW08")
-        if args.resource_profile and not args.build_only:
-            raise TestFailure("HW08 resource profiles are build-only measurements")
-        args.float_fast, args.skip_asm = resolve_hw08_options(
-            args.resource_profile, args.float_fast, args.skip_asm
-        )
+        for name in selected:
+            validate_hw08_target_options(
+                name,
+                targets[name],
+                args.case,
+                args.skip_asm,
+            )
         if args.throughput_qualification:
-            if args.float_fast or args.skip_asm or args.resource_profile:
+            if args.float_fast or args.skip_asm:
                 raise TestFailure(
                     "--throughput-qualification does not support marker/resource options"
                 )
@@ -1443,7 +2075,7 @@ def main() -> int:
             if (
                 args.case == "HW08"
                 and target.get("hw08_protocol") == "gated-throughput"
-                and (args.float_fast or args.skip_asm or args.resource_profile)
+                and (args.float_fast or args.skip_asm)
             ):
                 raise TestFailure(
                     f"{name} gated-throughput does not support marker/resource options"
@@ -1474,7 +2106,6 @@ def main() -> int:
                     args.up_size,
                     args.float_fast,
                     args.skip_asm,
-                    args.resource_profile,
                     args.throughput_qualification,
                     library_sha,
                     source_dirty,

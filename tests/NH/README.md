@@ -108,6 +108,11 @@ python3 tests/NH/run_nh.py --case NH02 --case NH03 --case NH04
 python3 tests/NH/run_nh.py --all
 ```
 
+`--all` 是正式 NH01-NH12 入口，要求主仓库为已提交且干净的候选；dirty 工作树会在创建
+证据目录和执行任何用例之前被拒绝。单独使用 `--case` 仍允许开发阶段预回归，但其
+metadata 会明确记录 `source_dirty: true`，不能作为正式发布证据。runner 在整套测试开始时
+冻结候选 SHA，并在每个用例开始和结束时确认候选身份未发生变化。
+
 默认在首个失败处停止。添加 `--keep-going` 可继续运行其余已选择的用例。使用 `--dry-run` 可以查看用例选择结果和最终生效的路径，而不检查工具、不创建证据目录，也不开始构建：
 
 ```sh
@@ -122,19 +127,10 @@ python3 tests/NH/run_nh.py --case NH07 \
   --cube-cmake /absolute/path/to/cube-cmake
 ```
 
-NH09 还可以通过用例配置接收 `NH09_SCOPE=m0`，将集成矩阵限制为 F042 的 Make 和 CMake 工程：
-
-```json
-{
-  "cases": {
-    "NH09": {
-      "environment": {"NH09_SCOPE": "m0"}
-    }
-  }
-}
-```
-
 NH09 和 NH10 要求各工程处于正常集成状态。HW 测试使用纯 Make/CMake overlay，因此无论 HW 测试正常完成还是中断，都不会在 `rtt_cfg.h` 或应用源码中留下 fixture 引用。NH 预检仍会拒绝工程侧遗留的 `tests/HW/...` 注入，并兼容识别目录改名前的 `tests/hw/...` 旧注入，避免陈旧工作树产生误导性的集成测试结果。
+NH09/NH10 构建前还会校验八个工程内实际使用的 `ARM_SEGGER_RTT`：每个目录都必须是
+独立、干净的 Git 工作树，并与启动 runner 的主仓库 HEAD 完全一致。外层工程自身的提交或
+脏状态不参与此项判定；实际库的路径、SHA 和脏状态会写入用例 metadata。
 
 ## 测试证据和工程影响
 
@@ -150,10 +146,18 @@ NH_RUN_YYYYMMDD_HHMMSS/
     artifacts/
 ```
 
+`SUMMARY.md` 和每个用例的 `metadata.json` 都记录主仓库完整候选 SHA 与 dirty 状态。
+即使依赖预检失败，用例目录仍会留下包含候选身份的 metadata、`FAIL` 结果和预检错误。
+
 运行器以及 NH01-NH08、NH11、NH12 不会修改工程源码或构建文件。NH10 在临时目录中构建实际工程，因此也不会改动工程源码树。NH09 会有意验证各工程原生的 clean、增量构建和 preset 工作流；它会删除并重新生成八个工程常规的 `build/` 目录。运行 NH09 前，请提交或另行保留需要的构建目录产物。
 
 NH09/NH10 的功能和资源构建会传入一个仅用于测试的 `SEGGER_RTT_WriteNoLock` 链接锚点。即使普通示例应用没有调用 RTT，该锚点也能防止 RTT 实现在启用 `--gc-sections` 时被裁剪，从而使测试可以观测它。锚点由测试命令或 overlay 提供，无需修改应用的 `main.c`、Makefile 或 CMake 目标定义。
 
 NH10 在 metadata 中记录测试脚本、工具链、构建环境和证据文件的哈希，但不读取或依赖测试计划文档。正式发布时由候选提交 SHA 和最终测试报告关联本轮采用的测试计划。
+formatter、typed integer、legacy float fast-off/on、Skip C/ASM 的 Flash、RAM、固定栈帧和
+符号检查统一归 NH10；这些原 HW08 build-only 项目不需要开发板，NH10 会对其执行三次
+干净构建、可复现性和冻结预算验收。具体配置映射和预算见
+[NH10 resource usage](cases/NH10/resource_usage/README.md)。HW08 只保留必须在真实硬件上
+完成的周期、吞吐和运行时栈检查。
 
 各个 `tests/NH/cases/NHxx/run.sh` 脚本仍可用于针对性开发，但 Python 入口才是可复现测试和证据记录的统一接口。

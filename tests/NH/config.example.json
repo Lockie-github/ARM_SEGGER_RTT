@@ -9,11 +9,5 @@
   "workspace": "..",
   "jobs": 8,
   "environment": {},
-  "cases": {
-    "NH09": {
-      "environment": {
-        "NH09_SCOPE": "all"
-      }
-    }
-  }
+  "cases": {}
 }

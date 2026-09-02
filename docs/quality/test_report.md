@@ -40,7 +40,7 @@ python3 tests/NH/run_nh.py --all \
   --evidence-dir TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901
 ```
 
-本机配置使用 `NH09_SCOPE=all`，因此 NH09 未缩减为 M0 子集。
+NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减测试矩阵。
 
 ## 3. 结果总览
 

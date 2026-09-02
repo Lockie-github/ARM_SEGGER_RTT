@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "case": "HW01",
+      "targets": "all",
+      "build_types": ["debug", "release"]
+    },
+    {
+      "case": "HW02",
+      "targets": "all",
+      "build_types": ["release"]
+    },
+    {
+      "case": "HW03",
+      "targets": "all",
+      "build_types": ["release"],
+      "profiles": [0, 1, 2, 3, 4, 5, 6]
+    },
+    {
+      "case": "HW04",
+      "targets": "all",
+      "build_types": ["release"],
+      "profiles": [0]
+    },
+    {
+      "case": "HW04",
+      "targets": [
+        "f103_make", "f103_cmake", "f411_make", "f411_cmake",
+        "h7b0_make", "h7b0_cmake"
+      ],
+      "build_types": ["release"],
+      "profiles": [1]
+    },
+    {
+      "case": "HW05",
+      "targets": "all",
+      "build_types": ["release"],
+      "profiles": [0, 1, 2, 3]
+    },
+    {
+      "case": "HW06",
+      "targets": "all",
+      "build_types": ["release"],
+      "up_sizes": [128, 256]
+    },
+    {
+      "case": "HW07",
+      "targets": "all",
+      "build_types": ["release"]
+    },
+    {
+      "case": "HW08",
+      "targets": ["f042_cmake"],
+      "build_types": ["release"],
+      "float_fast": [0, 1],
+      "skip_asm": [0]
+    },
+    {
+      "case": "HW08",
+      "targets": [
+        "f103_make", "f103_cmake", "f411_make", "f411_cmake",
+        "h7b0_make", "h7b0_cmake"
+      ],
+      "build_types": ["release"],
+      "float_fast": [0, 1],
+      "skip_asm": [0, 1]
+    },
+    {
+      "case": "HW08",
+      "targets": ["f042_make"],
+      "build_types": ["release"],
+      "repeat": 3
+    },
+    {
+      "case": "HW08",
+      "targets": ["f411_make"],
+      "build_types": ["release"],
+      "throughput_qualification": true,
+      "repeat": 3
+    }
+  ]
+}

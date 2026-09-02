@@ -7,7 +7,8 @@
     "rtt_ready_timeout": 50,
     "test_timeout": 120,
     "disconnect_seconds": 3,
-    "toolchain_bin": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin",
+    "toolchain_bin": "",
+    "nm": "arm-none-eabi-nm",
     "sample_count": 7168,
     "forbidden_patterns": [
       "RESULT=FAIL",
@@ -32,7 +33,6 @@
       "fixture_marker": "HW_TEST_CASE == 8",
       "jlink_speed": 4000,
       "elf": "build/stm32f042g6make.elf",
-      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
       "result_symbol": "HW08_Result",
       "result_size": 64,
       "result_magic": 1213682768,
@@ -140,7 +140,6 @@
       "hw08_qualification_min_repetitions": 3,
       "hw08_allowed_build_types": ["release"],
       "elf": "build/stm32f411cemake.elf",
-      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
       "result_symbol": "HW08_Result",
       "result_size": 64,
       "result_magic": 1213682768,
@@ -205,7 +204,6 @@
       "hw08_expected_mib_s": 0.36,
       "hw08_rate_tolerance": 0.01,
       "elf": "build/stm32h7b0vbmake.elf",
-      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
       "build": {
         "debug": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=1", "OPT=-Og"]],
         "release": [["make", "clean"], ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os"]]
@@ -235,7 +233,6 @@
       "hw08_expected_mib_s": 0.36,
       "hw08_rate_tolerance": 0.01,
       "elf": "build/{cmake_build}/*.elf",
-      "nm": "/opt/arm-gnu-toolchain-12.2.rel1-darwin-arm64-arm-none-eabi/bin/arm-none-eabi-nm",
       "build": {
         "debug": [["make", "preset_debug"], ["make", "d"]],
         "release": [["make", "preset_release"], ["make", "r"]]

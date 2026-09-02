@@ -16,7 +16,10 @@ tests/
     support/             NH 共享辅助文件
   HW/                    HW01-HW08 硬件测试
     run_hw.py            HW 统一运行器
-    targets.json         MCU、工程、构建和探针配置
+    release_matrix.json  正式发布组合矩阵
+    targets.json         可移植的 MCU、工程、构建和探针配置
+    config.example.json  HW 本机路径覆盖模板
+    config.local.json    自动加载的本机路径覆盖，不提交
     fixtures/            目标侧测试 fixture
     support/             Make/CMake overlay 和测试配置
     docs/                现行 HW 验证记录
@@ -30,9 +33,12 @@ tests/
 | 测试集 | 范围 | 是否需要开发板 | 统一入口 | 详细说明 |
 |---|---|---:|---|---|
 | NH01-NH12 | 主机行为、格式化、配置开关、代码裁剪、工程集成、资源和回归测试 | 否 | `tests/NH/run_nh.py` | [NH 测试说明](NH/README.md) |
-| HW01-HW08 | MCU 端到端输出、重连、并发、吞吐、资源和栈测试 | 是，完整测试还需要 J-Link | `tests/HW/run_hw.py` | [HW 测试说明](HW/README.md) |
+| HW01-HW08 | MCU 端到端输出、重连、并发、吞吐、性能和运行时栈测试 | 是，完整测试还需要 J-Link | `tests/HW/run_hw.py` | [HW 测试说明](HW/README.md) |
 
 NH09 和 NH10 虽然不连接开发板，但会使用八个外部 STM32 工程进行交叉构建，因此比普通主机测试需要更多工具和工程配置。HW 的 `--build-only` 不需要连接开发板，但只证明编译和链接成功，不能作为硬件 PASS。
+
+NH 与 HW 的 `config.local.json` 都是机器相关输入并由 Git 忽略。版本化配置保存测试语义，
+本地配置只提供工作区、工具链和工程路径；最终报告与 metadata 记录实际使用的环境。
 
 ## 快速检查
 
@@ -58,11 +64,11 @@ python3 tests/HW/run_hw.py \
 
 ## 推荐执行顺序
 
-1. 根据 [NH 配置说明](NH/README.md#配置) 创建本机的 `tests/NH/config.local.json`。
+1. 根据 [NH 配置说明](NH/README.md#配置) 和 [HW 配置说明](HW/README.md#本机配置) 创建本机配置。
 2. 先运行 NH01-NH08、NH11 和 NH12，验证主机行为、API 和 Arm 构建结果。
 3. 配置八个外部工程后运行 NH09 和 NH10，验证工程集成和资源预算。
-4. 对目标 MCU 的 Make/CMake 工程先执行 HW `--dry-run`，再按需执行 `--build-only`。
-5. 连接正确的开发板和 J-Link，按照 HW01 到 HW08 的顺序逐个运行；每个用例 PASS 后再运行下一个。
+4. 对目标 MCU 的 Make/CMake 工程先执行 HW `--dry-run`；`--build-only` 仅用于定位构建问题。
+5. 连接正确的开发板和 J-Link，使用 `--release-suite` 执行版本化 HW 发布矩阵。
 
 运行完整 NH 测试集：
 
@@ -70,12 +76,29 @@ python3 tests/HW/run_hw.py \
 python3 tests/NH/run_nh.py --all
 ```
 
+正式 `--all` 要求主仓库为干净的已提交候选。统一 summary 和所有用例 metadata 都会记录
+完整候选 SHA 与 dirty 状态；单用例 dirty 运行只用于开发阶段预回归。
+
 运行单个 HW 用例：
 
 ```sh
 python3 tests/HW/run_hw.py \
   --target h7b0_make --case HW01 --build-type release
 ```
+
+单用例命令仅用于诊断和预回归。正式 HW 发布执行及精确证据验收为：
+
+```sh
+python3 tests/HW/run_hw.py --release-suite \
+  --mcu-order STM32H7B0VB --mcu-order STM32F042G6 \
+  --evidence-dir TEST_EVIDENCE/HW_RELEASE_<candidate>
+python3 tests/HW/run_hw.py \
+  --verify-evidence TEST_EVIDENCE/HW_RELEASE_<candidate>
+```
+
+版本化的 `tests/HW/release_matrix.json` 固化 178 个唯一组合、182 次实际运行，全部要求
+真机 `PASS`，不含 build-only 资源组合；验证器会拒绝任何缺失/多余组合、缺失/多余结果、
+参数或候选 SHA 不一致。无需开发板的资源、符号和可复现性门禁统一由 NH10 执行。
 
 不要直接执行带测试宏的工程 Makefile 来代替 HW runner。HW 所需 fixture、链接参数和 RTT 判定协议由 Make/CMake overlay 与 runner 共同提供。
 
@@ -90,6 +113,10 @@ TEST_EVIDENCE/
 ```
 
 可以使用 `--evidence-dir PATH` 为一次验收指定独立目录。runner 不会静默覆盖已有的证据目录；失败重跑应保留旧证据并使用新目录，或按 HW 文档约定移入批次的 `ATTEMPTS/`。
+
+正式发布证据只对 metadata 和报告记录的完整候选 Git SHA 有效。主仓库产生新的候选
+提交后，必须重新执行完整 NH01-NH12 和 HW01-HW08 发布矩阵；旧证据只能保留为原候选
+的历史记录，不能通过影响范围分析拼接进新候选的发布结论。定向重跑只用于诊断和预回归。
 
 `TEST_EVIDENCE/` 默认被 Git 忽略。需要随版本发布的结论应整理成稳定的 Markdown 报告，记录环境、命令、结果和对应证据索引，而不是直接提交全部原始构建产物。
 

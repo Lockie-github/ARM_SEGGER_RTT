@@ -11,21 +11,11 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." && pwd)
 WORKSPACE=${NH_WORKSPACE:-$(CDPATH= cd -- "$PROJECT_DIR/.." && pwd)}
 EVIDENCE_DIR=${NH09_EVIDENCE_DIR:-$PROJECT_DIR/TEST_EVIDENCE/TEST_EVIDENCE_NH09_20260821}
-NH09_SCOPE=${NH09_SCOPE:-all}
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/rtt-nh09-test.XXXXXX")
 CUBE_GCC=${CUBE_GCC:-${TOOLCHAIN_PREFIX}gcc}
 FEATURE_CONFIG_DIR="$SCRIPT_DIR/configs/features"
 NH_LINK_LIBS='-lc -lm -lnosys -Wl,--undefined=SEGGER_RTT_WriteNoLock'
 NH_CMAKE_LINK_OVERLAY="$SCRIPT_DIR/../../support/link_anchor.cmake"
-
-case "$NH09_SCOPE" in
-  all|m0) ;;
-  *)
-    printf 'NH09 FAIL: unsupported scope %s (expected all or m0)\n' \
-      "$NH09_SCOPE" >&2
-    exit 2
-    ;;
-esac
 
 cleanup() {
   rm -rf "$TEMP_ROOT"
@@ -508,48 +498,42 @@ done
 run_make_project f042 "$WORKSPACE/stm32f042g6make" stm32f042g6make cortex-m0 '' C
 run_cmake_project f042 "$WORKSPACE/stm32f042g6cmake" stm32f042g6cmake cortex-m0 '' C
 
-if [ "$NH09_SCOPE" = all ]; then
-  run_make_project f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make cortex-m3 '' C
-  run_make_project f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake cortex-m4 \
-    '-mfpu=fpv4-sp-d16 -mfloat-abi=hard' C
-  run_make_project h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake cortex-m7 \
-    '-mfpu=fpv5-d16 -mfloat-abi=hard' C
+run_make_project f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make cortex-m3 '' C
+run_make_project f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake cortex-m4 \
+  '-mfpu=fpv4-sp-d16 -mfloat-abi=hard' C
+run_make_project h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake cortex-m7 \
+  '-mfpu=fpv5-d16 -mfloat-abi=hard' C
 
-  run_cmake_project f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake cortex-m3 '' C
-  run_cmake_project f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake cortex-m4 \
-    '-mfpu=fpv4-sp-d16 -mfloat-abi=hard' C
-  run_cmake_project h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake cortex-m7 \
-    '-mfpu=fpv5-d16 -mfloat-abi=hard' C
+run_cmake_project f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake cortex-m3 '' C
+run_cmake_project f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake cortex-m4 \
+  '-mfpu=fpv4-sp-d16 -mfloat-abi=hard' C
+run_cmake_project h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake cortex-m7 \
+  '-mfpu=fpv5-d16 -mfloat-abi=hard' C
 
-  run_override_tests
+run_override_tests
 
-  run_make_features f042 "$WORKSPACE/stm32f042g6make" stm32f042g6make C
-  run_make_features f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make ASM
-  run_make_features f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake ASM
-  run_make_features h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake ASM
-  run_cmake_features f042 "$WORKSPACE/stm32f042g6cmake" stm32f042g6cmake C
-  run_cmake_features f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake ASM
-  run_cmake_features f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake ASM
-  run_cmake_features h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake ASM
+run_make_features f042 "$WORKSPACE/stm32f042g6make" stm32f042g6make C
+run_make_features f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make ASM
+run_make_features f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake ASM
+run_make_features h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake ASM
+run_cmake_features f042 "$WORKSPACE/stm32f042g6cmake" stm32f042g6cmake C
+run_cmake_features f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake ASM
+run_cmake_features f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake ASM
+run_cmake_features h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake ASM
 
-  run_make_fallback f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make \
-    '-DUSE_HAL_DRIVER -DSTM32F103xB'
-  run_make_fallback f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake \
-    '-DUSE_HAL_DRIVER -DSTM32F411xE'
-  run_make_fallback h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake \
-    '-DUSE_HAL_DRIVER -DSTM32H7B0xx'
-  run_cmake_fallback f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake
-  run_cmake_fallback f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake
-  run_cmake_fallback h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake
-fi
+run_make_fallback f103 "$WORKSPACE/stm32f103c8make" stm32f103c8make \
+  '-DUSE_HAL_DRIVER -DSTM32F103xB'
+run_make_fallback f411 "$WORKSPACE/stm32f411cemake" stm32f411cemake \
+  '-DUSE_HAL_DRIVER -DSTM32F411xE'
+run_make_fallback h7b0 "$WORKSPACE/stm32h7b0vbmake" stm32h7b0vbmake \
+  '-DUSE_HAL_DRIVER -DSTM32H7B0xx'
+run_cmake_fallback f103 "$WORKSPACE/stm32f103c8cmake" stm32f103c8cmake
+run_cmake_fallback f411 "$WORKSPACE/stm32f411cecmake" stm32f411cecmake
+run_cmake_fallback h7b0 "$WORKSPACE/stm32h7b0vbcmake" stm32h7b0vbcmake
 
 if test -s "$FAILURE_FILE"; then
   printf '%s\n' 'NH09 completed with requirement failures:' >&2
   sed -n '1,120p' "$FAILURE_FILE" >&2
   exit 1
 fi
-if [ "$NH09_SCOPE" = m0 ]; then
-  printf '%s\n' 'NH09 M0 PASS: F042 Make/CMake Debug/Release, artifacts, flags, C path, incremental, reproducibility'
-else
-  printf '%s\n' 'NH09 PASS: 8 projects, Debug/Release, artifacts, flags, ASM/C, config, optimization, incremental, reproducibility'
-fi
+printf '%s\n' 'NH09 PASS: 8 projects, Debug/Release, artifacts, flags, ASM/C, config, optimization, incremental, reproducibility'

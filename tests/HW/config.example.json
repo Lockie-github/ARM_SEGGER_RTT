@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "toolchain_bin": "/path/to/arm-gnu-toolchain/bin",
+    "nm": "arm-none-eabi-nm"
+  },
+  "targets": {
+    "h7b0_make": {
+      "project_dir": "/path/to/stm32h7b0vbmake"
+    }
+  }
+}
