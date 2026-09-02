@@ -950,6 +950,40 @@ def archive_artifacts(project: Path, target: dict[str, Any], evidence: Path, val
         raise TestFailure("build produced no configured artifacts")
 
 
+def resolve_hw08_options(
+    resource_profile: int, float_fast: int, skip_asm: int
+) -> tuple[int, int]:
+    if resource_profile == 0:
+        return float_fast, skip_asm
+    if float_fast or skip_asm:
+        raise TestFailure(
+            "HW08 resource profiles select their own float/Skip implementation"
+        )
+    return (1 if resource_profile == 4 else 0, 1 if resource_profile == 6 else 0)
+
+
+def evidence_variant(
+    case: str,
+    profile: int,
+    up_size: int,
+    float_fast: int,
+    skip_asm: int,
+    resource_profile: int,
+    protocol: str,
+    throughput_qualification: bool,
+) -> Path:
+    if throughput_qualification:
+        return Path("qualification")
+    profile_leaf = Path(f"profile-{profile}")
+    if case == "HW06":
+        return Path(f"up-size-{up_size}") / profile_leaf
+    if case == "HW08" and resource_profile:
+        return Path(f"resource-profile-{resource_profile}") / profile_leaf
+    if case == "HW08" and protocol == "marker":
+        return Path(f"float-fast-{float_fast}_skip-asm-{skip_asm}") / profile_leaf
+    return profile_leaf
+
+
 def run_target(
     name: str,
     target: dict[str, Any],
@@ -1000,8 +1034,16 @@ def run_target(
     if case == "HW04" and target["mcu"] == "STM32F042G6" and profile != 0:
         raise TestFailure("STM32F042G6 HW04 only supports the C profile (0)")
     check_fixture(target)
-    evidence_leaf = "qualification" if throughput_qualification else f"profile-{profile}"
-    evidence = evidence_root / case / name / build_type / evidence_leaf
+    evidence = evidence_root / case / name / build_type / evidence_variant(
+        case,
+        profile,
+        up_size,
+        float_fast,
+        skip_asm,
+        resource_profile,
+        protocol,
+        throughput_qualification,
+    )
     if repeated:
         evidence = evidence / f"run-{repetition}"
     if evidence.exists():
@@ -1100,7 +1142,11 @@ def run_target(
         "throughput_qualification": throughput_qualification,
         "repetition": repetition,
         "hw07_start_gate": target.get("hw07_start_gate") if case == "HW07" else None,
-        "hw08_gate_symbol": target.get("hw08_gate_symbol") if case == "HW08" else None,
+        "hw08_gate_symbol": (
+            target.get("hw08_gate_symbol")
+            if case == "HW08" and not build_only
+            else None
+        ),
         "project_dir": str(project),
         "cmake_overlay": target["build_system"] == "cmake",
         "started_at": dt.datetime.now().astimezone().isoformat(),
@@ -1120,6 +1166,9 @@ def run_target(
     entry_address = locate_symbol(
         find_elf(project, target, build_type), target, evidence, "HW_TestEntry"
     )
+    if build_only:
+        (evidence / "result.txt").write_text("BUILD PASS\n", encoding="ascii")
+        return
     if protocol == "gated-throughput":
         result_address = locate_symbol(find_elf(project, target, build_type), target, evidence)
         (evidence / "gate.json").write_text(
@@ -1147,9 +1196,6 @@ def run_target(
             ) + "\n",
             encoding="utf-8",
         )
-    if build_only:
-        (evidence / "result.txt").write_text("BUILD PASS\n", encoding="ascii")
-        return
     flash_log = evidence / "flash.log"
     run_commands(target["flash"][build_type], project, flash_log, values, environment, False)
     require_no_log_failure(flash_log, "flash")
@@ -1363,6 +1409,9 @@ def main() -> int:
             raise TestFailure("HW08-specific options require --case HW08")
         if args.resource_profile and not args.build_only:
             raise TestFailure("HW08 resource profiles are build-only measurements")
+        args.float_fast, args.skip_asm = resolve_hw08_options(
+            args.resource_profile, args.float_fast, args.skip_asm
+        )
         if args.throughput_qualification:
             if args.float_fast or args.skip_asm or args.resource_profile:
                 raise TestFailure(

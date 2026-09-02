@@ -157,6 +157,15 @@ python3 tests/HW/run_hw.py --target f103_make --case HW04 --profile 1
 HW01～HW08 集中保存，但 runner 拒绝覆盖已存在的用例/profile 目录；重跑前应移动旧
 证据到批次内的 `ATTEMPTS/`，或者使用新的证据目录。
 
+带独立矩阵参数的用例会在 `profile-<n>` 前增加参数目录，避免同一批次内的有效组合
+相互覆盖：
+
+```text
+HW06/<target>/<build>/up-size-128/profile-0/
+HW08/<target>/<build>/float-fast-1_skip-asm-0/profile-0/
+HW08/<target>/<build>/resource-profile-4/profile-0/
+```
+
 `--build-only` 不要求连接开发板，只证明编译和链接成功，不等价于硬件 PASS。
 
 ## 用例参数
@@ -206,6 +215,16 @@ F042 CMake 和 F1/F4/H7 使用 HW08 marker 协议，要求 7168 条样本和完�
 其中 H7 还必须通过上述门控吞吐闭环。
 F042 Make gated-throughput 不接受上述 marker/resource 参数。
 非零 `--resource-profile` 只生成用于尺寸分析的固件，必须同时使用 `--build-only`。
+资源 profile 自身确定被测实现，不与 `--float-fast` 或 `--skip-asm` 组合：
+
+| resource profile | 被测路径 | 有效配置 |
+|---:|---|---|
+| 1 | formatter | fast off，Skip C |
+| 2 | typed integer | fast off，Skip C |
+| 3 | legacy float | fast off，Skip C |
+| 4 | legacy float | fast on，Skip C |
+| 5 | RTT Skip | fast off，Skip C |
+| 6 | RTT Skip | fast off，Skip ASM |
 
 F411 的普通 marker HW08 中，2048 帧突发写入仅为 `CHARACTERIZATION`，允许
 `NO_BLOCK_SKIP` 按契约拒绝整帧，不能代替冻结保证线。正式资格测试独立使用历史 v2

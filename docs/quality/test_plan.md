@@ -83,6 +83,8 @@ TEST_EVIDENCE/
     NHxx/artifacts/
   HW_RUN_<timestamp>/
     HWxx/<target>/<build>/profile-<n>/
+    HW06/<target>/<build>/up-size-<n>/profile-0/
+    HW08/<target>/<build>/<implementation-or-resource>/profile-0/
 ```
 
 使用 `--evidence-dir PATH` 将同一验收批次写入明确的新目录。`TEST_EVIDENCE/` 默认不提交；发布报告只提交环境、命令、结果、关键有效配置和证据索引。外部工程的 Git 状态可以作为诊断信息记录，但不得单独用于改变用例 PASS/FAIL；不要求归档或提交完整外部工程快照。
@@ -164,6 +166,10 @@ NH01-NH12 必须全部退出 0，且统一 `SUMMARY.md` 中全部为 PASS。
 | HW08 gated | 不适用 | `f042_make` | 默认协议，`--repeat 3` |
 | HW08 qualification | 不适用 | `f411_make` | `--throughput-qualification --repeat 3` |
 | HW08 资源 | build-only | build-only | marker 目标分别执行 `--resource-profile 1..6` |
+
+HW08 资源 profile 固定为：1 formatter、2 typed integer、3 legacy float fast-off、
+4 legacy float fast-on、5 Skip C、6 Skip ASM。资源 profile 自身确定有效实现配置，不与
+`--float-fast` 或 `--skip-asm` 叠加。
 
 Debug 用于确认两类工程的构建、烧录和 RTT 建链；完整功能、边界、吞吐与性能资格线冻结在 Release。F042 Make HW08 协议不接受 marker/resource 参数。
 
