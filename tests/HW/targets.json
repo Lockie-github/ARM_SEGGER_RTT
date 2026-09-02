@@ -49,12 +49,19 @@
       "tp_remainder_denom": 1024,
       "capture_seconds": 32,
       "build": {
+        "debug": [
+          ["make", "clean"],
+          ["make", "-j{jobs}", "DEBUG=1", "OPT=-Og"]
+        ],
         "release": [
           ["make", "clean"],
           ["make", "-j{jobs}", "DEBUG=0", "OPT=-Os", "HW08_TP_RUN_ID={run_id}", "HW08_TP_BASE_TICKS={tp_base_ticks}", "HW08_TP_REMAINDER_STEP={tp_remainder_step}", "HW08_TP_REMAINDER_DENOM={tp_remainder_denom}"]
         ]
       },
       "flash": {
+        "debug": [
+          ["make", "flash", "DEBUG=1", "OPT=-Og"]
+        ],
         "release": [
           ["make", "flash", "DEBUG=0", "OPT=-Os", "HW08_TP_RUN_ID={run_id}", "HW08_TP_BASE_TICKS={tp_base_ticks}", "HW08_TP_REMAINDER_STEP={tp_remainder_step}", "HW08_TP_REMAINDER_DENOM={tp_remainder_denom}"]
         ]

@@ -9,6 +9,15 @@ import run_hw
 
 
 class HWRunnerTests(unittest.TestCase):
+    def test_all_targets_configure_debug_and_release_build_and_flash(self):
+        _, targets = run_hw.load_config(run_hw.DEFAULT_CONFIG)
+        expected = {"debug", "release"}
+
+        for name, target in targets.items():
+            with self.subTest(target=name):
+                self.assertEqual(set(target["build"]), expected)
+                self.assertEqual(set(target["flash"]), expected)
+
     def test_resource_profiles_select_expected_implementations(self):
         expected = {
             1: (0, 0),
