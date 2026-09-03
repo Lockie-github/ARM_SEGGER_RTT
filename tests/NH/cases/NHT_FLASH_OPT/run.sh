@@ -6,27 +6,27 @@ ARM_CC=${TOOLCHAIN_PREFIX}gcc
 ARM_SIZE=${TOOLCHAIN_PREFIX}size
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." && pwd)
-if [ -n "${NH_OUTPUT_DIR:-}" ]; then
+if test -n "${NH_OUTPUT_DIR:-}"; then
   BUILD_ROOT=$NH_OUTPUT_DIR
   mkdir -p "$BUILD_ROOT"
   KEEP_BUILD=1
 else
-  BUILD_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/rtt-nht-m0-flash.XXXXXX")
+  BUILD_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/rtt-nht-flash-opt.XXXXXX")
   KEEP_BUILD=0
 fi
-M0_FLAGS="-mcpu=cortex-m0 -mthumb"
+M0_FLAGS='-mcpu=cortex-m0 -mthumb'
 
 cleanup() {
-  if [ "$KEEP_BUILD" -eq 0 ]; then
+  if test "$KEEP_BUILD" -eq 0; then
     rm -rf "$BUILD_ROOT"
   fi
 }
 trap cleanup EXIT INT TERM
 
-build_config() {
+build_fast_path() {
   name=$1
   fast_path=$2
-  build="$BUILD_ROOT/$name"
+  build="$BUILD_ROOT/m0_fast_path/$name"
   mkdir -p "$build"
 
   # shellcheck disable=SC2086
@@ -64,23 +64,26 @@ build_config() {
 }
 
 flash_size() {
-  awk 'NR == 2 { print $1 + $2 }' "$BUILD_ROOT/$1/size.txt"
+  awk 'NR == 2 { print $1 + $2 }' "$BUILD_ROOT/m0_fast_path/$1/size.txt"
 }
 
-build_config fast_on 1
-build_config fast_off 0
+build_fast_path fast_on 1
+build_fast_path fast_off 0
 fast_on_flash=$(flash_size fast_on)
 fast_off_flash=$(flash_size fast_off)
 {
   printf 'fast_on_flash=%s\n' "$fast_on_flash"
   printf 'fast_off_flash=%s\n' "$fast_off_flash"
   printf 'saved=%s\n' "$((fast_on_flash - fast_off_flash))"
-} >"$BUILD_ROOT/sizes.txt"
+} >"$BUILD_ROOT/m0_fast_path/sizes.txt"
 
 if test "$fast_off_flash" -ge "$fast_on_flash"; then
-  printf 'NHT_M0_FLASH disabling float fast-path did not reduce Flash: on=%s off=%s\n' \
+  printf 'NHT_FLASH_OPT disabling M0 float fast-path did not reduce Flash: on=%s off=%s\n' \
     "$fast_on_flash" "$fast_off_flash" >&2
   exit 1
 fi
-printf 'NHT_M0_FLASH PASS: M0 fast-on=%s B fast-off=%s B saved=%s B\n' \
+printf 'NHT_FLASH_OPT M0 fast-path PASS: on=%s B off=%s B saved=%s B\n' \
   "$fast_on_flash" "$fast_off_flash" "$((fast_on_flash - fast_off_flash))"
+
+sh "$SCRIPT_DIR/release_compare.sh" "$BUILD_ROOT/release_compare"
+printf '%s\n' 'NHT_FLASH_OPT PASS: M0 fast-path and release resource comparisons passed'

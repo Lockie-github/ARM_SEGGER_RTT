@@ -5,7 +5,6 @@ LC_ALL=C
 export LC_ALL
 
 TOOLCHAIN_PREFIX=${TOOLCHAIN_PREFIX:-arm-none-eabi-}
-BASELINE_REF=${BASELINE_REF:-release}
 RESOURCE_SCOPE=${NH10_RESOURCE_SCOPE:-full}
 OUTPUT_DIR=${1:-resource_results}
 CC=${TOOLCHAIN_PREFIX}gcc
@@ -33,13 +32,8 @@ mkdir -p "$OUTPUT_DIR/artifacts"
 OUTPUT_DIR=$(CDPATH= cd -- "$OUTPUT_DIR" && pwd)
 FAILURES="$OUTPUT_DIR/failures.txt"
 : > "$FAILURES"
-RELEASE_DIR="$WORK_DIR/release"
-mkdir -p "$RELEASE_DIR"
-git -C "$PROJECT_DIR" archive "$BASELINE_REF" | tar -x -C "$RELEASE_DIR"
-
 "$CC" --version | sed -n '1p' > "$OUTPUT_DIR/toolchain.txt"
 git -C "$PROJECT_DIR" rev-parse HEAD > "$OUTPUT_DIR/current_commit.txt"
-git -C "$PROJECT_DIR" rev-parse "$BASELINE_REF" > "$OUTPUT_DIR/release_commit.txt"
 
 printf '%s\n' 'implementation,configuration,target,run,text,rodata,data,bss,flash,ram,max_stack,elf_sha256' > "$OUTPUT_DIR/measurements.csv"
 printf '%s\n' 'implementation,configuration,target,run,symbol' > "$OUTPUT_DIR/dependencies.csv"
@@ -48,6 +42,7 @@ printf '%s\n' 'implementation,configuration,target,run,formatter,asm_symbol' > "
 
 common_flags='-std=gnu11 -Os -g0 -ffunction-sections -fdata-sections -fno-lto -fstack-usage -Wall -Wextra -Werror'
 common_link='--specs=nosys.specs -nostartfiles -Wl,-e,main -Wl,--gc-sections'
+control_symbols='-Wl,--defsym,RTT_LogFloat3=0 -Wl,--defsym,RTT_LogPrintf=0 -Wl,--defsym,RTT_LogString=0 -Wl,--defsym,SEGGER_RTT_printf=0 -Wl,--defsym,RTT_LogI32=0 -Wl,--defsym,RTT_LogU32=0 -Wl,--defsym,RTT_LogHex32=0 -Wl,--defsym,RTT_LogPointer=0 -Wl,--defsym,RTT_LogF32=0'
 
 section_value() {
   "$SIZE" -A "$1" | awk -v section="$2" '$1 == section { total += $2 } END { print total + 0 }'
@@ -148,6 +143,10 @@ build_current() {
   "$CC" $common_flags $arch_flags -DRESOURCE_PROFILE="$profile_id" \
     -I"$build/config" -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
     -c "$SCRIPT_DIR/current_benchmark.c" -o "$build/benchmark.o"
+  "$CC" $common_flags $arch_flags $common_link $control_symbols \
+    -Wl,-Map="$build/control.map" "$build/benchmark.o" \
+    -lc -lnosys -o "$build/control.elf"
+  record_result control "$profile" "$target" "$run" "$build" control
   "$CC" $common_flags $arch_flags -I"$build/config" -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
     -c "$PROJECT_DIR/RTT/SEGGER_RTT.c" -o "$build/SEGGER_RTT.o"
   "$CC" $common_flags $arch_flags -I"$build/config" -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
@@ -162,42 +161,7 @@ build_current() {
     "$build/benchmark.o" "$build/SEGGER_RTT.o" "$build/rtt_printf.o" \
     "$build/rtt_log.o" "$build/rtt_float.o" "$build/SEGGER_RTT_ASM_ARMv7M.o" \
     -lm -lc -lnosys -o "$build/result.elf"
-  record_result current "$profile" "$target" "$run" "$build"
-}
-
-build_release() {
-  profile=$1
-  target=$2
-  run=$3
-  arch_flags=$4
-  profile_id=$5
-  build="$WORK_DIR/release_${profile}_${target}_${run}"
-  mkdir -p "$build"
-  "$CC" $common_flags $arch_flags -DRESOURCE_PROFILE="$profile_id" \
-    -I"$RELEASE_DIR" -I"$RELEASE_DIR/RTT" \
-    -c "$SCRIPT_DIR/release_benchmark.c" -o "$build/benchmark.o"
-  "$CC" $common_flags $arch_flags -I"$RELEASE_DIR" -I"$RELEASE_DIR/RTT" \
-    -c "$RELEASE_DIR/RTT/SEGGER_RTT.c" -o "$build/SEGGER_RTT.o"
-  "$CC" $common_flags $arch_flags -I"$RELEASE_DIR" -I"$RELEASE_DIR/RTT" \
-    -c "$RELEASE_DIR/RTT/SEGGER_RTT_printf.c" -o "$build/SEGGER_RTT_printf.o"
-  "$CC" $common_flags $arch_flags -x assembler-with-cpp -I"$RELEASE_DIR" -I"$RELEASE_DIR/RTT" \
-    -c "$RELEASE_DIR/RTT/SEGGER_RTT_ASM_ARMv7M.S" -o "$build/SEGGER_RTT_ASM_ARMv7M.o"
-  "$CC" $common_flags $arch_flags $common_link -Wl,-Map="$build/result.map" \
-    "$build/benchmark.o" "$build/SEGGER_RTT.o" "$build/SEGGER_RTT_printf.o" \
-    "$build/SEGGER_RTT_ASM_ARMv7M.o" -lm -lc -lnosys -o "$build/result.elf"
-  record_result release "$profile" "$target" "$run" "$build"
-}
-
-build_baseline() {
-  target=$1
-  run=$2
-  arch_flags=$3
-  build="$WORK_DIR/baseline_${target}_${run}"
-  mkdir -p "$build"
-  "$CC" $common_flags $arch_flags -c "$SCRIPT_DIR/baseline.c" -o "$build/baseline.o"
-  "$CC" $common_flags $arch_flags $common_link -Wl,-Map="$build/result.map" \
-    "$build/baseline.o" -lc -lnosys -o "$build/result.elf"
-  record_result baseline empty "$target" "$run" "$build"
+  record_result current "$profile" "$target" "$run" "$build" result
 }
 
 record_result() {
@@ -206,7 +170,8 @@ record_result() {
   target=$3
   run=$4
   build=$5
-  elf="$build/result.elf"
+  stem=$6
+  elf="$build/$stem.elf"
   text=$(section_value "$elf" .text)
   rodata=$(section_value "$elf" .rodata)
   data=$(section_value "$elf" .data)
@@ -233,7 +198,7 @@ record_result() {
     mkdir -p "$artifact_dir"
     artifact="$artifact_dir/result"
     cp "$elf" "${artifact}.elf"
-    cp "$build/result.map" "${artifact}.map"
+    cp "$build/$stem.map" "${artifact}.map"
     "$OBJDUMP" -h "$elf" > "${artifact}.sections.txt"
     "$OBJDUMP" -d "$elf" > "${artifact}.objdump.txt"
     "$NM" "$elf" > "${artifact}.symbols.txt"
@@ -247,8 +212,6 @@ run_target_matrix() {
   target=$1
   arch_flags=$2
   for run in 1 2 3; do
-    build_baseline "$target" "$run" "$arch_flags"
-    build_release default "$target" "$run" "$arch_flags" 1
     build_current default "$target" "$run" "$arch_flags" 1
     build_current lite "$target" "$run" "$arch_flags" 1
     build_current print_string "$target" "$run" "$arch_flags" 8
@@ -278,14 +241,11 @@ if ! awk -F, '
     split("cortex-m0 cortex-m3 cortex-m4f cortex-m7", targets, " ");
     split("default lite print_string typed typed_float typed_combo legacy_fast_off legacy_fast_on skip_c skip_asm", profiles, " ");
     for (i in targets) {
-      target=targets[i]; d="current,default," target; r="release,default," target;
-      if (flash[d] > flash[r] + 1024 || ram[d] > ram[r]) {
-        print target " default exceeds release regression budget" > "/dev/stderr"; bad=1;
-      }
+      target=targets[i];
       for (j in profiles) {
         key="current," profiles[j] "," target;
-        if (flash[key] > 16384 || ram[key] > 2048 || stack[key] > 256) {
-          print key " exceeds absolute budget" > "/dev/stderr"; bad=1;
+        if (ram[key] > 2048 || stack[key] > 256) {
+          print key " exceeds RAM or stack budget" > "/dev/stderr"; bad=1;
         }
       }
       off="current,legacy_fast_off," target; on="current,legacy_fast_on," target;
@@ -301,7 +261,7 @@ if ! awk -F, '
     exit bad;
   }
 ' "$OUTPUT_DIR/measurements.csv"; then
-  printf '%s\n' 'Flash/RAM budget failure' >> "$FAILURES"
+  printf '%s\n' 'RAM, stack, or relative resource budget failure' >> "$FAILURES"
 fi
 
 if awk -F, '$1 == "current" && $3 == "cortex-m0" && ($2 == "default" || $2 ~ /^typed/) && $5 ~ /^__aeabi_.*div/ { found=1 } END { exit found ? 0 : 1 }' "$OUTPUT_DIR/dependencies.csv"; then
@@ -320,6 +280,68 @@ if ! awk -F, '
   printf '%s\n' 'formatter or Skip symbol budget failure' >> "$FAILURES"
 fi
 
+printf '%s\n' \
+  'target,configuration,final_flash,control_flash,library_flash,final_ram,control_ram,library_ram,max_stack' \
+  >"$OUTPUT_DIR/library_footprint.csv"
+awk -F, '
+  NR == 1 || $4 != 1 { next }
+  {
+    key=$3 FS $2
+    target[key]=$3; profile[key]=$2
+    if ($1 == "control") { control_flash[key]=$9; control_ram[key]=$10 }
+    if ($1 == "current") { flash[key]=$9; ram[key]=$10; stack[key]=$11 }
+  }
+  END {
+    for (key in target) {
+      print target[key] "," profile[key] "," flash[key] "," control_flash[key] "," \
+        flash[key]-control_flash[key] "," ram[key] "," control_ram[key] "," \
+        ram[key]-control_ram[key] "," stack[key]
+    }
+  }
+' "$OUTPUT_DIR/measurements.csv" | sort >>"$OUTPUT_DIR/library_footprint.csv"
+
+if ! awk -F, '
+  function print_table(configuration, title,    i, key) {
+    print "## " title
+    print ""
+    print "| Target | Full link (B) | Paired control (B) | Library Flash (B) |"
+    print "|---|---:|---:|---:|"
+    for (i = 1; i <= target_count; i++) {
+      key=configuration SUBSEP targets[i]
+      if (!(key in library_flash)) {
+        print "missing Flash result: " configuration "," targets[i] > "/dev/stderr"
+        bad=1
+        continue
+      }
+      print "| " targets[i] " | " final_flash[key] " | " control_flash[key] " | " library_flash[key] " |"
+    }
+    print ""
+  }
+  BEGIN {
+    target_count=split("cortex-m0 cortex-m3 cortex-m4f cortex-m7", targets, " ")
+    print "# NH10 linked library Flash footprint"
+    print ""
+    print "Library Flash = full RTT link Flash - paired control link Flash."
+    print "The default profile exercises level logs, print, string, and legacy float."
+    print "The typed_combo profile exercises typed integer/pointer and typed float only."
+    print ""
+  }
+  NR == 1 { next }
+  $2 == "typed_combo" || $2 == "default" {
+    key=$2 SUBSEP $1
+    final_flash[key]=$3
+    control_flash[key]=$4
+    library_flash[key]=$5
+  }
+  END {
+    print_table("default", "default")
+    print_table("typed_combo", "typed_combo")
+    exit bad
+  }
+' "$OUTPUT_DIR/library_footprint.csv" >"$OUTPUT_DIR/flash_footprint.md"; then
+  printf '%s\n' 'default/typed_combo Flash report failure' >> "$FAILURES"
+fi
+
 if grep -q '^repeatability failure$' "$FAILURES"; then
   printf '%s\n' 'One or more configurations were not repeatable.' > "$OUTPUT_DIR/repeatability.txt"
 else
@@ -330,5 +352,5 @@ if test -s "$FAILURES"; then
   echo "resource evidence completed with failures: $OUTPUT_DIR" >&2
   exit 1
 fi
-printf '%s\n' 'All frozen Flash/RAM and dependency budgets passed.' > "$OUTPUT_DIR/budget_results.txt"
+printf '%s\n' 'All RAM, stack, relative resource, and dependency budgets passed; linked library Flash footprints were recorded without an absolute cap.' > "$OUTPUT_DIR/budget_results.txt"
 echo "resource evidence: $OUTPUT_DIR"

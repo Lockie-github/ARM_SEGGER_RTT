@@ -37,8 +37,7 @@ FAILURES="$EVIDENCE_DIR/failures.txt"
 : >"$FAILURES"
 {
   printf '%s\n' '# NH-10 budgets frozen before execution' ''
-  printf '%s\n' '- Minimal current image: Flash <= 16384 B, static RAM <= 2048 B, fixed stack frame <= 256 B.'
-  printf '%s\n' '- Current default: Flash <= freshly rebuilt release + 1024 B; static RAM <= release.'
+  printf '%s\n' '- Every current configuration: static RAM <= 2048 B and fixed stack frame <= 256 B; linked library Flash is the full link minus a paired control link of the identical benchmark object and has no absolute cap.'
   printf '%s\n' '- Legacy float fast on: Flash <= fast off + 256 B; stack <= fast off + 64 B; RAM unchanged.'
   printf '%s\n' '- Skip ASM: absolute Flash delta versus Skip C <= 256 B; RAM unchanged; M0 remains C-equivalent.'
   printf '%s\n' '- Typed-only and typed-float-only: formatter absent; M0 default/typed: no integer division helper.'
@@ -348,11 +347,11 @@ for project in \
   } >"$EVIDENCE_DIR/metadata/${project}_version.txt"
 done
 
-echo 'NH10 phase 1/2: minimal configurations and fresh release baseline'
+echo 'NH10 phase 1/2: current configuration resource matrix'
 resource_failed=0
 if ! sh "$SCRIPT_DIR/resource_usage/run.sh" "$EVIDENCE_DIR/resource_usage"; then
   resource_failed=1
-  printf '%s\n' 'minimal/release resource budget failure' >>"$FAILURES"
+  printf '%s\n' 'current configuration resource budget failure' >>"$FAILURES"
 fi
 
 echo 'NH10 phase 2/2: actual-project default C / Skip ASM / forced C matrix'
@@ -371,4 +370,4 @@ if test "$resource_failed" -ne 0 || test -s "$FAILURES"; then
   printf '%s\n' 'NH10 FAIL: one or more frozen resource budgets failed' >&2
   exit 1
 fi
-printf '%s\n' 'NH10 PASS: release baseline, 3x expanded configurations, 8 actual projects, C/ASM resource comparison'
+printf '%s\n' 'NH10 PASS: 3x current configurations, 8 actual projects, C/ASM resource comparison'

@@ -20,8 +20,8 @@
   构建、烧录、RTT 采集和判定
 - 新增非硬件测试独立命名域：`NHO_*` 表示长期可选诊断，当前包含旧配置迁移检查
   `NHO_LEGACY_CONFIG`；`NHT_*` 表示完成对应优化确认后退役的临时测试，当前包含
-  formatter 历史兼容性检查 `NHT_FMT_COMPAT` 和 M0 fast-path Flash 对比
-  `NHT_M0_FLASH`。两类测试均须通过 `--case` 显式运行，不属于 `--all`、常规 CI 或
+  formatter 历史兼容性检查 `NHT_FMT_COMPAT`，以及集中执行 M0 fast-path 与四架构
+  default/release 资源对比的 `NHT_FLASH_OPT`。两类测试均须通过 `--case` 显式运行，不属于 `--all`、常规 CI 或
   发布门禁
 - 新增集中维护的 NH/HW 测试源码、目标 fixture、共享支持文件和跨平台配置入口；
   HW 测试通过 Make/CMake overlay 注入，不要求被测工程保留测试专用源码或构建修改
@@ -29,6 +29,9 @@
   支持，包括随机会话 ID、启动 gate、目标结果结构、帧序号和 CRC 闭环判定
 - 新增测试证据目录、防静默覆盖规则、候选提交身份记录和发布测试计划；原始证据默认
   保存在不提交 Git 的 `TEST_EVIDENCE/`，发布结论通过候选 SHA、报告和证据索引关联
+- NH10 新增基于配对控制链接的 RTT 库 Flash 统计，并以 `default` 和 `typed_combo`
+  两个表格输出四种 Cortex-M 架构的人工可读摘要；完整 profile 数据继续保存在 CSV，
+  发布关闭时以摘要填写最终测试报告
 - 新增日志总开关、轻量模式和各日志接口的分层配置
 - 新增项目级 `rtt_cfg.h` 配置覆盖；CMake/Make 优先使用应用工程配置目录，
   修改配置后需清理并重新编译 RTT 对象

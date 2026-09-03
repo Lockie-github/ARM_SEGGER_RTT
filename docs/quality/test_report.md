@@ -85,20 +85,43 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 
 全部工程通过初始清理、Debug/Release 完整构建、无变化增量构建、清理重建、Release 哈希复现和链接产物检查。外部工程的 `ARM_SEGGER_RTT` 均为干净工作树并解析到完整候选提交 `b0b37cba62d6745368604029719c1ce810f59e44`。
 
-### 4.3 实际工程默认资源
+### 4.3 资源数据边界
 
-以下为 NH10 第二阶段的实际工程默认配置数据；每个数值在三次干净构建中保持一致。
+本历史报告对应提交 `b0b37cb`。该候选的 NH10 证据记录了隔离 fixture 最终 ELF 和实际工程
+完整 ELF，但没有使用相同 benchmark 对象生成配对控制链接，因此不能从该证据中严格分离
+benchmark 与 RTT 库自身的 Flash 占用。原先列出的实际工程整体 Flash 包含启动代码、HAL、
+应用和 RTT，不能作为 RTT 库大小，故不再作为库 Flash 展示。
 
-| MCU | Make Flash/RAM | CMake Flash/RAM |
-|---|---:|---:|
-| F042 | 4100 B / 1824 B | 4016 B / 1824 B |
-| F103 | 3468 B / 1824 B | 3388 B / 1824 B |
-| F411 | 4568 B / 1824 B | 4568 B / 1824 B |
-| H7B0 | 5808 B / 1832 B | 5708 B / 1832 B |
+从下一候选开始，NH10 通过同一 benchmark 对象的“RTT 完整链接 Flash - 配对控制链接 Flash”
+生成 `artifacts/resource_usage/library_footprint.csv`；面向人工阅读的
+`artifacts/resource_usage/flash_footprint.md`
+分别以 `default` 和 `typed_combo` 两个表格列出四种架构的库链接 Flash 占用。完整 CSV 保留
+所有配置，实际工程完整镜像大小只保留为链接容量和工程内差异证据。
+
+以下两张表是后续候选的固定报告结构。本报告对应的旧证据无法按新口径计算库 Flash，
+因此数值单元格保留为空；不得用实际工程完整 ELF 数据回填。
+
+#### default RTT 库 Flash
+
+| 架构 | 完整链接 Flash (B) | 配对控制 Flash (B) | RTT 库 Flash (B) |
+|---|---:|---:|---:|
+| Cortex-M0 |  |  |  |
+| Cortex-M3 |  |  |  |
+| Cortex-M4F |  |  |  |
+| Cortex-M7 |  |  |  |
+
+#### typed_combo RTT 库 Flash
+
+| 架构 | 完整链接 Flash (B) | 配对控制 Flash (B) | RTT 库 Flash (B) |
+|---|---:|---:|---:|
+| Cortex-M0 |  |  |  |
+| Cortex-M3 |  |  |  |
+| Cortex-M4F |  |  |  |
+| Cortex-M7 |  |  |  |
 
 NH10 共执行 216 次新目录构建：隔离资源矩阵 144 次，8 个实际工程的 default、Skip ASM、forced C 矩阵 72 次。所有最小配置、默认配置、formatter、typed integer、legacy float fast-off/on、Skip C/ASM 和依赖裁剪预算均通过；这些无需开发板的原 HW08 资源检查现统一由 NH10 负责。矩阵内所有配置连续三次生成相同 ELF SHA-256；最大固定栈帧为 104 B，低于 256 B 门槛。
 
-这些资源值只描述报告所列工具链、工程和有效配置，不构成其他用户工程的固定资源保证。
+本报告不对 `b0b37cb` 给出无法由当轮证据严格支持的 RTT 库 Flash 数值。
 
 ## 5. 外部工程记录
 

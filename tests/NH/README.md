@@ -36,7 +36,7 @@ tests/NH/
 | NH12 | API 失败/短写/恢复、formatter flush 失败及浮点路径回归语料 | 主机 C 编译器 |
 | `NHT_FMT_COMPAT`（临时） | 当前 formatter 与兼容旧布局基线的行为确认 | 主机 C 编译器、Git、tar |
 | `NHO_LEGACY_CONFIG`（可选） | 旧浮点配置宏的迁移诊断 | 主机 C 编译器 |
-| `NHT_M0_FLASH`（临时） | Cortex-M0 float fast-path Flash 差异 | Arm GNU Toolchain |
+| `NHT_FLASH_OPT`（临时） | M0 fast-path 及四架构 default/release Flash、RAM 差异 | Arm GNU Toolchain、Git、tar |
 
 只列出测试用例及其依赖组，不实际运行：
 
@@ -114,7 +114,7 @@ python3 tests/NH/run_nh.py --ci
 python3 tests/NH/run_nh.py --all
 python3 tests/NH/run_nh.py --case NHT_FMT_COMPAT
 python3 tests/NH/run_nh.py --case NHO_LEGACY_CONFIG
-python3 tests/NH/run_nh.py --case NHT_M0_FLASH
+python3 tests/NH/run_nh.py --case NHT_FLASH_OPT
 ```
 
 `--ci` 是常规 CI 入口，固定运行不依赖外部工程的 NH01-NH08、NH11 和 NH12；NH09、
@@ -148,13 +148,18 @@ NHT_FMT_COMPAT_BASELINE_REF=release \
 python3 tests/NH/run_nh.py --case NHO_LEGACY_CONFIG
 ```
 
-`NHT_M0_FLASH` 在 Cortex-M0、`-Os` 和 `--gc-sections` 的相同构建条件下分别生成
-float fast-on/off 最终 ELF，以 `text + data` 作为 Flash，并要求 fast-off 严格小于 fast-on。
-该资源差异检查是当前 M0 fast-path Flash 优化的短期临时确认，完成对应优化验证后退役并
-删除；它不属于 `--all`、发布门禁或常规 CI，必须显式运行：
+`NHT_FLASH_OPT` 集中执行本次 Flash 优化的两类临时资源比较：在 Cortex-M0、`-Os` 和
+`--gc-sections` 的相同构建条件下生成 float fast-on/off 最终 ELF，并要求 fast-off Flash
+严格小于 fast-on；在 M0、M3、M4F 和 M7 上各执行三次 current/default 与兼容 release/default
+构建，要求 ELF 可复现，当前 Flash 不超过 release 加 1024 B且静态 RAM 不超过 release。
+默认基线为 Git `release` 分支；可使用 `NHT_FLASH_OPT_BASELINE_REF` 指定包含旧版
+`RTT/SEGGER_RTT_printf.c` 的兼容基线，解析后的完整 SHA 会写入证据。
+
+该项是当前 Flash 优化的短期确认，完成对应优化验证后退役并删除；它不属于 `--all`、发布
+门禁或常规 CI，必须显式运行：
 
 ```sh
-python3 tests/NH/run_nh.py --case NHT_M0_FLASH
+python3 tests/NH/run_nh.py --case NHT_FLASH_OPT
 ```
 
 默认在首个失败处停止。添加 `--keep-going` 可继续运行其余已选择的用例。使用 `--dry-run` 可以查看用例选择结果和最终生效的路径，而不检查工具、不创建证据目录，也不开始构建：
@@ -198,11 +203,22 @@ NH_RUN_YYYYMMDD_HHMMSS/
 
 NH09/NH10 的功能和资源构建会传入一个仅用于测试的 `SEGGER_RTT_WriteNoLock` 链接锚点。即使普通示例应用没有调用 RTT，该锚点也能防止 RTT 实现在启用 `--gc-sections` 时被裁剪，从而使测试可以观测它。锚点由测试命令或 overlay 提供，无需修改应用的 `main.c`、Makefile 或 CMake 目标定义。
 
-NH10 在 metadata 中记录测试脚本、工具链、构建环境和证据文件的哈希，但不读取或依赖测试计划文档。正式发布时由候选提交 SHA 和最终测试报告关联本轮采用的测试计划。
+NH10 在 metadata 中记录测试脚本、工具链、构建环境和证据文件的哈希，但不读取或依赖测试计划文档，也不会修改 `docs/quality/test_report.md`。正式发布时由候选提交 SHA 和最终测试报告关联本轮采用的测试计划。
 formatter、typed integer、legacy float fast-off/on、Skip C/ASM 的 Flash、RAM、固定栈帧和
 符号检查统一归 NH10；这些原 HW08 build-only 项目不需要开发板，NH10 会对其执行三次
 干净构建、可复现性和冻结预算验收。具体配置映射和预算见
 [NH10 resource usage](cases/NH10/resource_usage/README.md)。HW08 只保留必须在真实硬件上
 完成的周期、吞吐和运行时栈检查。
+
+NH10 报告库 Flash 时使用 `artifacts/resource_usage/library_footprint.csv`：每个配置使用完全相同的
+benchmark 对象分别执行控制链接和 RTT 完整链接，两者 Flash 差值是库链接占用。该口径排除
+benchmark 自身，同时包含 RTT 拉入的运行库支持。`actual/measurements.csv` 中的实际工程
+Flash 是完整应用镜像占用，只用于链接容量和相同工程内的 C/ASM 差异证据，不作为 RTT 库
+占用报告。面向人工阅读的 `artifacts/resource_usage/flash_footprint.md` 只输出两个表格：
+`default` 和 `typed_combo`。`default` 开启四级日志、print、string 和 legacy float，并由
+探针调用这些入口；`typed_combo` 只开启 typed integer/pointer 和 typed float，并调用五个
+typed 入口。每张表均以字节列出完整链接、配对控制和两者之差。完整的所有 profile 数据仍
+保留在 CSV 中。正式 NH/HW 证据验收完成后，以该 Markdown 摘要填写
+`docs/quality/test_report.md` 中同名的两张表；runner 不自动更新最终报告。
 
 各个 `tests/NH/cases/<CASE_ID>/run.sh` 脚本仍可用于针对性开发，但 Python 入口才是可复现测试和证据记录的统一接口。

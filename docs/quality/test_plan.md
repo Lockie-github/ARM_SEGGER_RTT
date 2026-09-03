@@ -13,7 +13,7 @@
 | 范围 | 项目 | 发布属性 |
 |---|---|---|
 | 非硬件回归 | NH01-NH12 | 必须全部通过 |
-| 临时优化确认 | `NHT_FMT_COMPAT`、`NHT_M0_FLASH` | 临时可选，不属于发布或常规 CI 门禁，完成对应优化确认后退役 |
+| 临时优化确认 | `NHT_FMT_COMPAT`、`NHT_FLASH_OPT` | 临时可选，不属于发布或常规 CI 门禁，完成对应优化确认后退役 |
 | 可选迁移诊断 | `NHO_LEGACY_CONFIG` | 可选，不属于发布或常规 CI 门禁 |
 | 板级回归 | HW01-HW08 | 必须按本文矩阵全部通过 |
 | 长时间稳定性 | HW09 | 后续扩展，不属于本版本发布阻塞项 |
@@ -111,7 +111,7 @@ python3 tests/NH/run_nh.py --ci \
 ```
 
 `--ci` 固定运行不依赖八个外部工程的 NH01-NH08、NH11 和 NH12，排除 NH09、NH10 以及
-可选或临时的 `NHO_LEGACY_CONFIG`、`NHT_FMT_COMPAT` 和 `NHT_M0_FLASH`。它与 `--all`
+可选或临时的 `NHO_LEGACY_CONFIG`、`NHT_FMT_COMPAT` 和 `NHT_FLASH_OPT`。它与 `--all`
 一样要求主仓库是已提交且干净的候选，并执行相同的候选 SHA 冻结、metadata 记录和运行
 期间身份检查。`--ci` 只用于常规自动回归；即使全部 PASS，
 也不能替代 `--all` 对 NH01-NH12 的完整执行，不能单独满足第 7 节的发布关闭条件。
@@ -148,16 +148,23 @@ python3 tests/NH/run_nh.py --ci \
 ### NH10 资源和可复现构建
 
 - 每个配置执行三次干净构建并比较 ELF 哈希和 section 尺寸。
-- 最小镜像：Flash 不超过 16384 B，静态 RAM 不超过 2048 B，最大固定栈帧不超过 256 B。
-- 当前默认配置：Flash 不超过同环境重建 release 加 1024 B，静态 RAM 不超过 release。
+- 所有当前资源配置的静态 RAM 不超过 2048 B，最大固定栈帧不超过 256 B；记录 Flash，
+  但不设置脱离具体工程容量和构建环境的统一绝对上限。每个配置使用完全相同的 benchmark
+  对象分别完成控制链接和 RTT 完整链接；报告中的库 Flash 占用定义为“RTT 完整链接 Flash
+  - 配对控制链接 Flash”，从而排除 benchmark 的调用点、全局变量和字符串，同时包含该配置
+  实际保留的 RTT 代码、数据初值及其拉入的运行库支持。实际工程整个 ELF 的 Flash 只作为
+  链接容量证据。机器可读 CSV 保留所有 profile；人工可读的 Flash 报告输出两个表格，分别为
+  `default` 和 `typed_combo`，每个表格以字节列出四种架构的完整链接、配对控制和库 Flash。
+  `default` 开启并调用四级日志、print、string 和 legacy float；`typed_combo` 只开启并调用
+  typed integer/pointer 和 typed float。前者代表默认完整功能，后者代表不依赖通用 formatter
+  的 typed 组合；二者只是正式报告展示项，不缩减 CSV 和资源门禁覆盖的完整 profile 矩阵。
 - legacy float fast：Flash 不超过 fast-off 加 256 B，固定栈不超过 fast-off 加 64 B，静态 RAM 不增加。
 - Skip ASM 与 Skip C 的 Flash 绝对差不超过 256 B，静态 RAM 不增加；M0 保持 C 路径。
 - typed-only、typed-float-only 不保留 formatter；M0 默认和 typed 路径不引入整数除法辅助符号。
 - NH10 在临时目录构建实际工程，并在 metadata 中记录测试脚本、工具链、构建环境和证据哈希。
 - 外部工程的本地配置和 dirty 状态不参与资源预算或 PASS/FAIL 判定。资源数据只适用于报告中记录的工具链、架构、构建模式和关键 RTT 配置，用作已验证参考值，不构成用户工程的固定资源保证。
-- 资源门禁全部归 NH10：formatter、typed integer、legacy float fast-off/on、Skip C/ASM
+- 长期发布资源门禁归 NH10：formatter、typed integer、legacy float fast-off/on、Skip C/ASM
   分别由 `default/print_string`、`typed`、`legacy_fast_off/on`、`skip_c/asm` 配置测量。
-  这些项目不需要开发板，不得再作为 HW08 build-only 组合重复执行。
 
 ### NH11-NH12 typed 与回归语料
 
@@ -196,16 +203,22 @@ python3 tests/NH/run_nh.py --case NHT_FMT_COMPAT
 python3 tests/NH/run_nh.py --case NHO_LEGACY_CONFIG
 ```
 
-### NHT_M0_FLASH 临时 M0 fast-path Flash 对比
+### NHT_FLASH_OPT 临时 Flash 优化对比
 
-`NHT_M0_FLASH` 使用 Cortex-M0、`-Os`、函数/数据 section 和链接期 `--gc-sections`，分别构建
-`RTT_LOG_FLOAT_FAST_PATH=1/0` 的最终 ELF，以 `text + data` 统计 Flash，并要求关闭
-fast-path 后 Flash 严格减小。实际字节数记录到证据，不作为跨工具链的固定资源保证。
-该项是当前 M0 fast-path Flash 优化的短期临时确认，完成对应优化验证后退役并删除；它不属于
-`--all`、发布关闭条件或常规 CI，必须显式运行：
+`NHT_FLASH_OPT` 集中保存本次 Flash 优化依赖历史状态或特定优化目标的短期比较。第一部分在
+Cortex-M0、`-Os`、函数/数据 section 和链接期 `--gc-sections` 的相同条件下分别构建
+`RTT_LOG_FLOAT_FAST_PATH=1/0` 的最终 ELF，以 `text + data` 统计 Flash，并要求关闭 fast-path
+后 Flash 严格减小。第二部分为 M0、M3、M4F 和 M7 各执行三次当前默认配置与兼容 release
+基线构建，要求各自 ELF 可复现、当前 Flash 不超过 release 加 1024 B、当前静态 RAM 不超过
+release。实际字节数只适用于证据记录的工具链，不构成跨工具链固定资源保证。
+
+该项默认比较 Git `release` 分支；只有包含旧路径 `RTT/SEGGER_RTT_printf.c` 且适用于本次
+优化比较的兼容基线，才可通过 `NHT_FLASH_OPT_BASELINE_REF` 指定。证据记录参数和解析后的
+完整基线 SHA。该项完成本次优化验证后退役并删除，不属于 `--all`、发布关闭条件或常规 CI，
+必须显式运行：
 
 ```sh
-python3 tests/NH/run_nh.py --case NHT_M0_FLASH
+python3 tests/NH/run_nh.py --case NHT_FLASH_OPT
 ```
 
 ## 6. HW01-HW08 执行矩阵
@@ -311,6 +324,6 @@ python3 tests/HW/run_hw.py \
 2. NH01-NH12 在候选提交上完整运行并全部 PASS。
 3. 四块板、八个工程按第 6 节完成 HW01-HW08，所有必需组合均 PASS。
 4. runner metadata、目标 marker 或 gated 证据均能关联候选 SHA，不存在旧固定 SHA。
-5. 原始证据目录只读保留，最终报告列出环境、命令、矩阵、工具链、关键有效配置、失败尝试、有效重跑及证据索引，并明确外部工程组合属于已验证参考环境而非用户配置限制。
+5. 原始证据目录只读保留，最终报告列出环境、命令、矩阵、工具链、关键有效配置、已进入测试执行并产生有效证据的失败、对应的有效重跑及证据索引，并明确外部工程组合属于已验证参考环境而非用户配置限制。NH10 的 `artifacts/resource_usage/flash_footprint.md` 作为数据源，将 `default`、`typed_combo` 两张表按原顺序填入最终报告；runner 不直接修改版本化报告。测试启动前发生的沙箱或文件权限限制、工具调用错误、设备尚未连接以及操作失误不属于测试结果，不写入测试报告。
 6. 最终测试后不得修改主仓库产品代码、runner、fixture、配置或本计划；如有修改，必须创建新候选提交并完整重跑 NH01-NH12 和第 6 节规定的 HW01-HW08 矩阵，不得把上一候选的 PASS 拼接到新候选报告中。
 7. HW09 未执行必须在发布说明中列为已知验证边界，不得宣称已完成长期稳定性测试。

@@ -30,7 +30,7 @@ CI_CASES = tuple(
     case for case in REQUIRED_CASES if case not in ("NH09", "NH10")
 )
 OPTIONAL_CASES = ("NHO_LEGACY_CONFIG",)
-TEMPORARY_CASES = ("NHT_FMT_COMPAT", "NHT_M0_FLASH")
+TEMPORARY_CASES = ("NHT_FMT_COMPAT", "NHT_FLASH_OPT")
 CASES: dict[str, dict[str, Any]] = {
     "NH01": {"script": "tests/NH/cases/NH01/run.sh", "needs": ["host", "arm"]},
     "NH02": {"script": "tests/NH/cases/NH02/run.sh", "needs": ["host"]},
@@ -64,9 +64,9 @@ CASES: dict[str, dict[str, Any]] = {
         "script": "tests/NH/cases/NHO_LEGACY_CONFIG/run.sh",
         "needs": ["host"],
     },
-    "NHT_M0_FLASH": {
-        "script": "tests/NH/cases/NHT_M0_FLASH/run.sh",
-        "needs": ["arm"],
+    "NHT_FLASH_OPT": {
+        "script": "tests/NH/cases/NHT_FLASH_OPT/run.sh",
+        "needs": ["arm", "git", "tar"],
     },
 }
 

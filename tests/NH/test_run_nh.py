@@ -131,7 +131,7 @@ class NHRunnerTests(unittest.TestCase):
         self.assertEqual(selected, list(run_nh.REQUIRED_CASES))
         self.assertNotIn("NHT_FMT_COMPAT", selected)
         self.assertNotIn("NHO_LEGACY_CONFIG", selected)
-        self.assertNotIn("NHT_M0_FLASH", selected)
+        self.assertNotIn("NHT_FLASH_OPT", selected)
 
     def test_missing_selection_uses_generic_case_id_in_error(self):
         with mock.patch.object(sys, "argv", ["run_nh.py"]):
@@ -154,7 +154,7 @@ class NHRunnerTests(unittest.TestCase):
         self.assertNotIn("NH10", selected)
         self.assertTrue(
             set(selected).isdisjoint(
-                ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_M0_FLASH")
+                ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_FLASH_OPT")
             )
         )
 
@@ -183,7 +183,7 @@ class NHRunnerTests(unittest.TestCase):
     def test_non_required_cases_have_explicit_scopes(self):
         self.assertEqual(run_nh.OPTIONAL_CASES, ("NHO_LEGACY_CONFIG",))
         self.assertEqual(
-            run_nh.TEMPORARY_CASES, ("NHT_FMT_COMPAT", "NHT_M0_FLASH")
+            run_nh.TEMPORARY_CASES, ("NHT_FMT_COMPAT", "NHT_FLASH_OPT")
         )
         scopes = (
             set(run_nh.REQUIRED_CASES),
@@ -196,10 +196,10 @@ class NHRunnerTests(unittest.TestCase):
         self.assertTrue(scopes[1].isdisjoint(scopes[2]))
         self.assertEqual(run_nh.case_scope("NHO_LEGACY_CONFIG"), "optional")
         self.assertEqual(run_nh.case_scope("NHT_FMT_COMPAT"), "temporary")
-        self.assertEqual(run_nh.case_scope("NHT_M0_FLASH"), "temporary")
+        self.assertEqual(run_nh.case_scope("NHT_FLASH_OPT"), "temporary")
 
     def test_non_required_cases_can_be_selected_explicitly(self):
-        for case in ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_M0_FLASH"):
+        for case in ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_FLASH_OPT"):
             with self.subTest(case=case), mock.patch.object(
                 sys, "argv", ["run_nh.py", "--case", case, "--dry-run"]
             ), mock.patch.object(

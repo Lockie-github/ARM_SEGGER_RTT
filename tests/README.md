@@ -35,7 +35,7 @@ tests/
 | NH01-NH12 | 主机行为、格式化、配置开关、代码裁剪、工程集成、资源和回归测试 | 否 | `tests/NH/run_nh.py` | [NH 测试说明](NH/README.md) |
 | `NHT_FMT_COMPAT`（临时） | formatter 与兼容旧布局基线的行为确认，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHT_FMT_COMPAT` | [NH 测试说明](NH/README.md) |
 | `NHO_LEGACY_CONFIG`（可选） | 旧浮点配置迁移诊断，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHO_LEGACY_CONFIG` | [NH 测试说明](NH/README.md) |
-| `NHT_M0_FLASH`（临时） | M0 float fast-path Flash 对比，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHT_M0_FLASH` | [NH 测试说明](NH/README.md) |
+| `NHT_FLASH_OPT`（临时） | M0 fast-path 及四架构 default/release 资源对比，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHT_FLASH_OPT` | [NH 测试说明](NH/README.md) |
 | HW01-HW08 | MCU 端到端输出、重连、并发、吞吐、性能和运行时栈测试 | 是，完整测试还需要 J-Link | `tests/HW/run_hw.py` | [HW 测试说明](HW/README.md) |
 
 NH09 和 NH10 虽然不连接开发板，但会使用八个外部 STM32 工程进行交叉构建，因此比普通主机测试需要更多工具和工程配置。HW 的 `--build-only` 不需要连接开发板，但只证明编译和链接成功，不能作为硬件 PASS。
@@ -73,6 +73,9 @@ python3 tests/HW/run_hw.py \
 3. 配置八个外部工程后运行 NH09 和 NH10，验证工程集成和资源预算。
 4. 对目标 MCU 的 Make/CMake 工程先执行 HW `--dry-run`；`--build-only` 仅用于定位构建问题。
 5. 连接正确的开发板和 J-Link，使用 `--release-suite` 执行版本化 HW 发布矩阵。
+6. 验证 NH/HW 证据均属于同一候选提交后，根据证据更新
+   `docs/quality/test_report.md`；其中 NH10 的 RTT 库 Flash 数据取自
+   `NH10/artifacts/resource_usage/flash_footprint.md`。runner 不会自动修改正式报告。
 
 运行完整 NH 测试集：
 
@@ -105,7 +108,8 @@ python3 tests/HW/run_hw.py \
 
 版本化的 `tests/HW/release_matrix.json` 固化 178 个唯一组合、182 次实际运行，全部要求
 真机 `PASS`，不含 build-only 资源组合；验证器会拒绝任何缺失/多余组合、缺失/多余结果、
-参数或候选 SHA 不一致。无需开发板的资源、符号和可复现性门禁统一由 NH10 执行。
+参数或候选 SHA 不一致。无需开发板的长期发布资源、符号和可复现性门禁统一由 NH10 执行；
+依赖历史 release 或本次特定优化目标的比较由临时 `NHT_FLASH_OPT` 执行。
 
 不要直接执行带测试宏的工程 Makefile 来代替 HW runner。HW 所需 fixture、链接参数和 RTT 判定协议由 Make/CMake overlay 与 runner 共同提供。
 
@@ -125,7 +129,10 @@ TEST_EVIDENCE/
 提交后，必须重新执行完整 NH01-NH12 和 HW01-HW08 发布矩阵；旧证据只能保留为原候选
 的历史记录，不能通过影响范围分析拼接进新候选的发布结论。定向重跑只用于诊断和预回归。
 
-`TEST_EVIDENCE/` 默认被 Git 忽略。需要随版本发布的结论应整理成稳定的 Markdown 报告，记录环境、命令、结果和对应证据索引，而不是直接提交全部原始构建产物。
+`TEST_EVIDENCE/` 默认被 Git 忽略。需要随版本发布的结论应在全部 NH/HW 证据验收完成后，
+整理到稳定的 `docs/quality/test_report.md` 中，记录环境、命令、结果和对应证据索引，而不是
+直接提交全部原始构建产物。NH10 自动生成的 `flash_footprint.md` 是填写正式报告中
+`default`、`typed_combo` 两张 RTT 库 Flash 表的数据源，不取代正式报告。
 
 ## 对工程的影响
 
