@@ -9,7 +9,7 @@
 ```text
 tests/
   README.md              测试总览和入口
-  NH/                    NH01-NH12 非硬件测试
+  NH/                    NH01-NH12 必需测试、NHO 可选测试及 NHT 临时测试
     run_nh.py            NH 统一运行器
     config.example.json  跨平台配置模板
     cases/               各 NH 用例的脚本、fixture 和资源
@@ -33,6 +33,9 @@ tests/
 | 测试集 | 范围 | 是否需要开发板 | 统一入口 | 详细说明 |
 |---|---|---:|---|---|
 | NH01-NH12 | 主机行为、格式化、配置开关、代码裁剪、工程集成、资源和回归测试 | 否 | `tests/NH/run_nh.py` | [NH 测试说明](NH/README.md) |
+| `NHT_FMT_COMPAT`（临时） | formatter 与兼容旧布局基线的行为确认，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHT_FMT_COMPAT` | [NH 测试说明](NH/README.md) |
+| `NHO_LEGACY_CONFIG`（可选） | 旧浮点配置迁移诊断，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHO_LEGACY_CONFIG` | [NH 测试说明](NH/README.md) |
+| `NHT_M0_FLASH`（临时） | M0 float fast-path Flash 对比，不属于发布门禁 | 否 | `tests/NH/run_nh.py --case NHT_M0_FLASH` | [NH 测试说明](NH/README.md) |
 | HW01-HW08 | MCU 端到端输出、重连、并发、吞吐、性能和运行时栈测试 | 是，完整测试还需要 J-Link | `tests/HW/run_hw.py` | [HW 测试说明](HW/README.md) |
 
 NH09 和 NH10 虽然不连接开发板，但会使用八个外部 STM32 工程进行交叉构建，因此比普通主机测试需要更多工具和工程配置。HW 的 `--build-only` 不需要连接开发板，但只证明编译和链接成功，不能作为硬件 PASS。
@@ -65,7 +68,8 @@ python3 tests/HW/run_hw.py \
 ## 推荐执行顺序
 
 1. 根据 [NH 配置说明](NH/README.md#配置) 和 [HW 配置说明](HW/README.md#本机配置) 创建本机配置。
-2. 先运行 NH01-NH08、NH11 和 NH12，验证主机行为、API 和 Arm 构建结果。
+2. 使用 `python3 tests/NH/run_nh.py --ci` 运行 NH01-NH08、NH11 和 NH12，
+   验证主机行为、API 和 Arm 构建结果。
 3. 配置八个外部工程后运行 NH09 和 NH10，验证工程集成和资源预算。
 4. 对目标 MCU 的 Make/CMake 工程先执行 HW `--dry-run`；`--build-only` 仅用于定位构建问题。
 5. 连接正确的开发板和 J-Link，使用 `--release-suite` 执行版本化 HW 发布矩阵。
@@ -73,11 +77,14 @@ python3 tests/HW/run_hw.py \
 运行完整 NH 测试集：
 
 ```sh
+python3 tests/NH/run_nh.py --ci
 python3 tests/NH/run_nh.py --all
 ```
 
-正式 `--all` 要求主仓库为干净的已提交候选。统一 summary 和所有用例 metadata 都会记录
-完整候选 SHA 与 dirty 状态；单用例 dirty 运行只用于开发阶段预回归。
+常规 CI 使用 `--ci`，不包含需要八个外部工程的 NH09、NH10，也不包含 `NHO_*`、`NHT_*`。
+`--ci` 和正式发布使用的 `--all` 都要求主仓库为干净的已提交候选。统一 summary 和所有
+用例 metadata 都会记录完整候选 SHA 与 dirty 状态；单用例 dirty 运行只用于开发阶段预回归。
+可选 `NHO_*` 和临时 `NHT_*` 必须显式运行，不会被 `--all` 或常规 CI 选中。
 
 运行单个 HW 用例：
 
@@ -122,7 +129,7 @@ TEST_EVIDENCE/
 
 ## 对工程的影响
 
-- NH01-NH08、NH11 和 NH12 不修改外部工程。
+- NH01-NH08、NH11-NH12、`NHO_*` 和 `NHT_*` 不修改外部工程。
 - NH10 在临时目录构建外部工程，不修改其源码树。
 - NH09 会删除并重新生成八个外部工程常规的 `build/` 目录，运行前应保留仍需使用的构建产物。
 - HW 使用纯 Make/CMake overlay，不修改工程的 `main.c`、中断源码、Makefile、`CMakeLists.txt`、linker script 或 `rtt_cfg.h`。

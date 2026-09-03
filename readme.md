@@ -71,6 +71,7 @@ log_err("status=%d", -1);
 | 测试集 | 范围 | 统一入口 | 环境要求 |
 |---|---|---|---|
 | NH01～NH12 | 主机行为、格式化、配置、代码裁剪、工程集成、资源和回归测试 | `tests/NH/run_nh.py` | macOS，或 Windows + Git Bash；NH09/NH10 还需要外部 STM32 工程和 Arm 工具链 |
+| NHO/NHT | 可选迁移诊断及临时优化确认，不属于发布或常规 CI 门禁 | `tests/NH/run_nh.py --case CASE_ID` | 具体依赖和生命周期见 NH 测试说明 |
 | HW01～HW08 | MCU 输出、重连、边界、并发、吞吐、资源和栈测试 | `tests/HW/run_hw.py` | STM32 目标板、J-Link、Arm 工具链及对应 Make/CMake 工程 |
 
 列出测试或运行完整 NH 测试：

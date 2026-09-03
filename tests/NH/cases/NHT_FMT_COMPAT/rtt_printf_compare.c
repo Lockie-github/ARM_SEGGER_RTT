@@ -103,7 +103,7 @@ static void test_long_message(void) {
 static void test_known_compatibility_differences(void) {
   reset_output();
   (void)SEGGER_RTT_printf(0u, "%ld", 42L);
-#if defined(RTT_COMPARE_RELEASE)
+#if defined(RTT_COMPARE_BASELINE)
   expect_output("42");
 #else
   expect_output("%ld");
@@ -111,7 +111,7 @@ static void test_known_compatibility_differences(void) {
 
   reset_output();
   (void)SEGGER_RTT_printf(0u, "%lu", 42UL);
-#if defined(RTT_COMPARE_RELEASE)
+#if defined(RTT_COMPARE_BASELINE)
   expect_output("42");
 #else
   expect_output("%lu");
@@ -119,7 +119,7 @@ static void test_known_compatibility_differences(void) {
 
   reset_output();
   (void)SEGGER_RTT_printf(0u, "%hd", 42);
-#if defined(RTT_COMPARE_RELEASE)
+#if defined(RTT_COMPARE_BASELINE)
   expect_output("42");
 #else
   expect_output("%hd");
@@ -127,7 +127,7 @@ static void test_known_compatibility_differences(void) {
 
   reset_output();
   (void)SEGGER_RTT_printf(0u, "%#x", 0x2Au);
-#if defined(RTT_COMPARE_RELEASE)
+#if defined(RTT_COMPARE_BASELINE)
   expect_output("2A");
 #else
   expect_output("%#x");
@@ -135,7 +135,7 @@ static void test_known_compatibility_differences(void) {
 
   reset_output();
   (void)SEGGER_RTT_printf(0u, "%f", 1.25);
-#if defined(RTT_COMPARE_RELEASE)
+#if defined(RTT_COMPARE_BASELINE)
   expect_output("");
 #else
   expect_output("%f");

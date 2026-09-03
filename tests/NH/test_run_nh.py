@@ -119,6 +119,96 @@ class NHRunnerTests(unittest.TestCase):
             run_case.assert_not_called()
             self.assertFalse((Path(directory) / "evidence").exists())
 
+    def test_all_selects_required_cases_but_not_non_required_cases(self):
+        with mock.patch.object(
+            sys, "argv", ["run_nh.py", "--all", "--dry-run"]
+        ), mock.patch.object(
+            run_nh, "run_case", return_value=True
+        ) as run_case:
+            self.assertEqual(run_nh.main(), 0)
+
+        selected = [call[0][0] for call in run_case.call_args_list]
+        self.assertEqual(selected, list(run_nh.REQUIRED_CASES))
+        self.assertNotIn("NHT_FMT_COMPAT", selected)
+        self.assertNotIn("NHO_LEGACY_CONFIG", selected)
+        self.assertNotIn("NHT_M0_FLASH", selected)
+
+    def test_missing_selection_uses_generic_case_id_in_error(self):
+        with mock.patch.object(sys, "argv", ["run_nh.py"]):
+            with self.assertRaisesRegex(
+                run_nh.NHFailure, "select --case CASE_ID, --ci, or --all"
+            ):
+                run_nh.main()
+
+    def test_ci_selects_portable_cases_only(self):
+        with mock.patch.object(
+            sys, "argv", ["run_nh.py", "--ci", "--dry-run"]
+        ), mock.patch.object(
+            run_nh, "run_case", return_value=True
+        ) as run_case:
+            self.assertEqual(run_nh.main(), 0)
+
+        selected = [call[0][0] for call in run_case.call_args_list]
+        self.assertEqual(selected, list(run_nh.CI_CASES))
+        self.assertNotIn("NH09", selected)
+        self.assertNotIn("NH10", selected)
+        self.assertTrue(
+            set(selected).isdisjoint(
+                ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_M0_FLASH")
+            )
+        )
+
+    def test_ci_rejects_dirty_candidate_before_creating_evidence(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            sys,
+            "argv",
+            [
+                "run_nh.py",
+                "--ci",
+                "--evidence-dir",
+                str(Path(directory) / "evidence"),
+            ],
+        ), mock.patch.object(
+            run_nh, "repository_identity", return_value=("c" * 40, True)
+        ), mock.patch.object(
+            run_nh, "run_case"
+        ) as run_case:
+            with self.assertRaisesRegex(
+                run_nh.NHFailure, "--ci requires a clean committed candidate"
+            ):
+                run_nh.main()
+            run_case.assert_not_called()
+            self.assertFalse((Path(directory) / "evidence").exists())
+
+    def test_non_required_cases_have_explicit_scopes(self):
+        self.assertEqual(run_nh.OPTIONAL_CASES, ("NHO_LEGACY_CONFIG",))
+        self.assertEqual(
+            run_nh.TEMPORARY_CASES, ("NHT_FMT_COMPAT", "NHT_M0_FLASH")
+        )
+        scopes = (
+            set(run_nh.REQUIRED_CASES),
+            set(run_nh.OPTIONAL_CASES),
+            set(run_nh.TEMPORARY_CASES),
+        )
+        self.assertEqual(set(run_nh.CASES), set().union(*scopes))
+        self.assertTrue(scopes[0].isdisjoint(scopes[1]))
+        self.assertTrue(scopes[0].isdisjoint(scopes[2]))
+        self.assertTrue(scopes[1].isdisjoint(scopes[2]))
+        self.assertEqual(run_nh.case_scope("NHO_LEGACY_CONFIG"), "optional")
+        self.assertEqual(run_nh.case_scope("NHT_FMT_COMPAT"), "temporary")
+        self.assertEqual(run_nh.case_scope("NHT_M0_FLASH"), "temporary")
+
+    def test_non_required_cases_can_be_selected_explicitly(self):
+        for case in ("NHT_FMT_COMPAT", "NHO_LEGACY_CONFIG", "NHT_M0_FLASH"):
+            with self.subTest(case=case), mock.patch.object(
+                sys, "argv", ["run_nh.py", "--case", case, "--dry-run"]
+            ), mock.patch.object(
+                run_nh, "run_case", return_value=True
+            ) as run_case:
+                self.assertEqual(run_nh.main(), 0)
+
+            self.assertEqual([call[0][0] for call in run_case.call_args_list], [case])
+
     def test_repository_identity_change_is_rejected(self):
         with mock.patch.object(
             run_nh,

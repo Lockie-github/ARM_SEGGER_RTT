@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the shared NH01-NH12 non-hardware test suite."""
+"""Run CI, required release, or optional non-hardware test cases."""
 
 from __future__ import annotations
 
@@ -25,11 +25,17 @@ WORKSPACE_PROJECTS = (
     "stm32f411cemake", "stm32f411cecmake",
     "stm32h7b0vbmake", "stm32h7b0vbcmake",
 )
+REQUIRED_CASES = tuple(f"NH{number:02d}" for number in range(1, 13))
+CI_CASES = tuple(
+    case for case in REQUIRED_CASES if case not in ("NH09", "NH10")
+)
+OPTIONAL_CASES = ("NHO_LEGACY_CONFIG",)
+TEMPORARY_CASES = ("NHT_FMT_COMPAT", "NHT_M0_FLASH")
 CASES: dict[str, dict[str, Any]] = {
     "NH01": {"script": "tests/NH/cases/NH01/run.sh", "needs": ["host", "arm"]},
     "NH02": {"script": "tests/NH/cases/NH02/run.sh", "needs": ["host"]},
     "NH03": {"script": "tests/NH/cases/NH03/run.sh", "needs": ["host"]},
-    "NH04": {"script": "tests/NH/cases/NH04/run.sh", "needs": ["host", "git", "tar"]},
+    "NH04": {"script": "tests/NH/cases/NH04/run.sh", "needs": ["host"]},
     "NH05": {"script": "tests/NH/cases/NH05/run.sh", "needs": ["host", "host_nm"]},
     "NH06": {"script": "tests/NH/cases/NH06/run.sh", "needs": ["host", "arm"]},
     "NH07": {
@@ -50,11 +56,31 @@ CASES: dict[str, dict[str, Any]] = {
         "needs": ["host", "host_nm", "arm"],
     },
     "NH12": {"script": "tests/NH/cases/NH12/run.sh", "needs": ["host"]},
+    "NHT_FMT_COMPAT": {
+        "script": "tests/NH/cases/NHT_FMT_COMPAT/run.sh",
+        "needs": ["host", "git", "tar"],
+    },
+    "NHO_LEGACY_CONFIG": {
+        "script": "tests/NH/cases/NHO_LEGACY_CONFIG/run.sh",
+        "needs": ["host"],
+    },
+    "NHT_M0_FLASH": {
+        "script": "tests/NH/cases/NHT_M0_FLASH/run.sh",
+        "needs": ["arm"],
+    },
 }
 
 
 class NHFailure(RuntimeError):
     pass
+
+
+def case_scope(case: str) -> str:
+    if case in REQUIRED_CASES:
+        return "required"
+    if case in TEMPORARY_CASES:
+        return "temporary"
+    return "optional"
 
 
 def git_identity(path: Path) -> tuple[Path, str, bool]:
@@ -517,6 +543,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--case", action="append", choices=tuple(CASES))
+    selection.add_argument("--ci", action="store_true")
     selection.add_argument("--all", action="store_true")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--config", type=Path)
@@ -538,11 +565,19 @@ def main() -> int:
     args = parse_args()
     if args.list:
         for case, entry in CASES.items():
-            print(f"{case}  {entry['script']}  [{', '.join(entry['needs'])}]")
+            print(
+                f"{case}  {entry['script']}  "
+                f"[{case_scope(case)}; {', '.join(entry['needs'])}]"
+            )
         return 0
-    selected = list(CASES) if args.all else (args.case or [])
+    if args.ci:
+        selected = list(CI_CASES)
+    elif args.all:
+        selected = list(REQUIRED_CASES)
+    else:
+        selected = args.case or []
     if not selected:
-        raise NHFailure("select --case NHxx or --all")
+        raise NHFailure("select --case CASE_ID, --ci, or --all")
 
     config_path = args.config.resolve() if args.config else None
     config = load_config(config_path)
@@ -560,8 +595,9 @@ def main() -> int:
     source_dirty = False
     if not args.dry_run:
         repository_sha, source_dirty = repository_identity()
-        if args.all and source_dirty:
-            raise NHFailure("--all requires a clean committed candidate")
+        if (args.ci or args.all) and source_dirty:
+            entry_point = "--ci" if args.ci else "--all"
+            raise NHFailure(f"{entry_point} requires a clean committed candidate")
 
     timestamp = dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     evidence_root = (

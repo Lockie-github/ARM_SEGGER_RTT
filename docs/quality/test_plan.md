@@ -13,6 +13,8 @@
 | 范围 | 项目 | 发布属性 |
 |---|---|---|
 | 非硬件回归 | NH01-NH12 | 必须全部通过 |
+| 临时优化确认 | `NHT_FMT_COMPAT`、`NHT_M0_FLASH` | 临时可选，不属于发布或常规 CI 门禁，完成对应优化确认后退役 |
+| 可选迁移诊断 | `NHO_LEGACY_CONFIG` | 可选，不属于发布或常规 CI 门禁 |
 | 板级回归 | HW01-HW08 | 必须按本文矩阵全部通过 |
 | 长时间稳定性 | HW09 | 后续扩展，不属于本版本发布阻塞项 |
 
@@ -49,9 +51,9 @@ HW09 保留为 8 h/24 h、Cache 和长期计数闭环的扩展稳定性项目。
 2. 最终测试开始前，主仓库必须是已记录的干净工作树。八个外部工程只作为本地参考测试环境，其提交、未提交修改和未跟踪配置不作为 NH09、NH10 或 HW 用例的通过条件，也不要求保存或发布完整工程快照。
 3. 外部工程实际使用的 `ARM_SEGGER_RTT` 目录必须解析到候选提交。报告记录实际 MCU/架构、Make/CMake、构建类型、工具链版本和影响 RTT 行为的关键配置；这些信息用于界定已验证组合，不用于固定外部工程基线。
 4. HW runner 从主仓库读取完整 Git SHA，通过 Make/CMake overlay 注入 `HW_TEST_LIBRARY_SHA`。主仓库工作树不干净时标识追加 `-dirty`；这种结果只可用于预回归，不可作为最终发布证据。
-   NH runner 在 `--all` 开始时冻结主仓库完整 Git SHA，正式执行拒绝 dirty 工作树；统一
-   summary 和 NH01-NH12 各自 metadata 均记录该 SHA 与 dirty 状态，并在每个用例开始和
-   结束时确认候选身份未变化。单用例 dirty 结果只可用于预回归。
+   NH runner 在 `--ci` 或 `--all` 开始时冻结主仓库完整 Git SHA，两种入口都拒绝 dirty
+   工作树；统一 summary 和每个已选用例的 metadata 均记录该 SHA 与 dirty 状态，并在每个
+   用例开始和结束时确认候选身份未变化。单用例 dirty 结果只可用于预回归。
 5. F042 Make HW08 不输出普通 marker，其固件身份由 runner metadata、随机非零 `run_id`、归档 ELF 哈希和结果结构共同绑定。
 6. 测试必须通过统一 runner 启动。不得直接运行带测试宏的工程 Makefile 代替 HW runner，也不得直接把单个 `run.sh` 的输出作为最终 NH 证据。
 7. Make/CMake HW 测试使用纯 overlay，不修改工程的 `main.c`、中断源码、Makefile、`CMakeLists.txt`、linker script 或 `rtt_cfg.h`。
@@ -80,10 +82,10 @@ NH runner 支持 macOS，以及 Python 3 配合 Git Bash 的 Windows 环境。�
 TEST_EVIDENCE/
   NH_RUN_<timestamp>/
     SUMMARY.md
-    NHxx/metadata.json
-    NHxx/run.log
-    NHxx/result.txt
-    NHxx/artifacts/
+    <CASE_ID>/metadata.json
+    <CASE_ID>/run.log
+    <CASE_ID>/result.txt
+    <CASE_ID>/artifacts/
   HW_RUN_<timestamp>/
     HWxx/<target>/<build>/profile-<n>/
     HW06/<target>/<build>/up-size-<n>/profile-0/
@@ -92,7 +94,7 @@ TEST_EVIDENCE/
 
 使用 `--evidence-dir PATH` 将同一验收批次写入明确的新目录。`TEST_EVIDENCE/` 默认不提交；发布报告只提交环境、命令、结果、关键有效配置和证据索引。外部工程的 Git 状态可以作为诊断信息记录，但不得单独用于改变用例 PASS/FAIL；不要求归档或提交完整外部工程快照。
 
-## 5. NH01-NH12
+## 5. NH 测试项
 
 运行完整非硬件回归：
 
@@ -100,6 +102,19 @@ TEST_EVIDENCE/
 python3 tests/NH/run_nh.py --all \
   --evidence-dir TEST_EVIDENCE/NH_RELEASE_<candidate>
 ```
+
+常规 CI 使用以下入口：
+
+```sh
+python3 tests/NH/run_nh.py --ci \
+  --evidence-dir TEST_EVIDENCE/NH_CI_<candidate>
+```
+
+`--ci` 固定运行不依赖八个外部工程的 NH01-NH08、NH11 和 NH12，排除 NH09、NH10 以及
+可选或临时的 `NHO_LEGACY_CONFIG`、`NHT_FMT_COMPAT` 和 `NHT_M0_FLASH`。它与 `--all`
+一样要求主仓库是已提交且干净的候选，并执行相同的候选 SHA 冻结、metadata 记录和运行
+期间身份检查。`--ci` 只用于常规自动回归；即使全部 PASS，
+也不能替代 `--all` 对 NH01-NH12 的完整执行，不能单独满足第 7 节的发布关闭条件。
 
 ### NH01 核心质量门
 
@@ -113,19 +128,19 @@ python3 tests/NH/run_nh.py --all \
 
 | 用例 | 验证重点 | 验收标准 |
 |---|---|---|
-| NH02 | 四级日志、颜色、Lite、失败传播和独立裁剪 | 输出逐字节一致；禁用后无输出和参数副作用 |
-| NH03 | `log_print`、`log_string`、长字符串、NULL 和功能关闭 | 格式、长度、返回值和禁用行为符合 API 约定 |
-| NH04 | formatter 格式、宽度、精度、分段 flush 和 release 对比 | 无截断、越界、重复或错误参数消费 |
-| NH05 | legacy/typed 浮点、bit/modff、compat/fast、46/47 B 标签 | 规范输出等价；短写返回错误且不重试 |
-| NH06 | 关键配置矩阵、参数副作用、符号和代码裁剪 | 开关互不串扰；非法通道编译失败；依赖可裁剪 |
-| NH07 | Make/CMake 自定义 `rtt_cfg.h` 搜索和增量重建 | 配置传播一致；非法配置失败；无旧对象污染 |
-| NH08 | Skip C/ASM、0 B、边界、回绕、TRIM/BLOCK | C/ASM 状态等价；拒绝写入不改变缓冲状态 |
+| NH02 | 非 Lite 彩色模式下的四级日志：普通、空、格式化及连续输出 | 12 个等级用例和连续序列逐字节一致；写入通道、次数及 4 条成功返回路径的字节数正确 |
+| NH03 | `log_print` 的普通、格式化、百分号和换行输出；`log_string` 的普通、空、换行、百分号和 NULL 输入；两项功能分别关闭 | 输出、写入次数和返回值符合 API 约定；关闭后无输出且参数表达式无副作用 |
+| NH04 | 当前 formatter 的格式、宽度、精度和分段 flush | 无截断、越界、重复或错误参数消费 |
+| NH05 | legacy 浮点输出、bit/modff 路径和依赖裁剪 | 两种路径输出等价；关闭后无参数副作用和 `modff` 依赖 |
+| NH06 | 功能开关行为、禁用后的参数副作用、Arm 符号及引用裁剪，以及 Armv7-M C/ASM 路径选择 | 禁用 API 无参数副作用；符号和依赖引用符合配置；M0 不引入整数除法辅助符号；Armv7-M 自动选择 ASM 且可强制 C；显式 ASM 与 cache 配置冲突时编译失败 |
+| NH07 | 主机、Make 和 CMake 的自定义 `rtt_cfg.h` 搜索、依赖记录、布局及干净重建 | 配置值和控制块尺寸正确；构建依赖包含 `rtt_cfg.h`；custom_a 到 custom_b 的干净重建生成不同对象；printf buffer 为 0 和日志通道越界时编译失败 |
+| NH08 | 日志、formatter、字符串和浮点 API 的失败、短写、分段中止及恢复；C `NO_BLOCK_SKIP` 环形缓冲的 0 B、可写、满缓冲和回绕 | API 按约定返回失败或已写字节数，分段失败后停止且后续调用可恢复；0 B 和满缓冲拒绝不改变缓冲状态，可写及回绕数据和写偏移正确 |
 
 ### NH09 实际工程集成
 
 - 八个工程分别构建 Debug/Release，检查架构、FPU、优化参数和完整产物。
-- 检查无变化增量构建、清理重建、Release 可复现性、默认 ASM 和强制 C 路径。
-- 检查 typed、typed float、float fast 和 Skip ASM 的配置传播。
+- 检查无变化增量构建、清理重建、Release 可复现性以及普通 Debug/Release 构建的默认 C 路径。
+- 检查 typed、typed float、float fast 和 Skip ASM 配置传播；feature 构建在非 M0 工程显式启用 ASM、在 M0 保持 C，并检查非 M0 工程的强制 C fallback。
 - NH09 会删除并重新生成外部工程常规 `build/` 目录，但不得修改工程源码和构建定义。
 - 外部工程可使用本地定制、未提交或未跟踪的配置；工作树是否干净不参与判定。runner 必须确认实际链接的 RTT 库为候选提交，并记录架构、工具链、构建类型和影响本次结论的 RTT 配置。
 - NH09 PASS 只声明候选 RTT 库已在所记录的八个真实工程组合中完成编译、链接、配置传播和产物检查；不声明外部工程已发布，不要求用户采用相同配置，也不替代板级运行测试。
@@ -149,9 +164,49 @@ python3 tests/NH/run_nh.py --all \
 | 用例 | 验证重点 | 验收标准 |
 |---|---|---|
 | NH11 | typed 整数、指针、标签边界、单次写入和非零通道 | 数值和位宽正确；标签最多 46 B；短写返回错误 |
-| NH12 | 全部 API 写入失败、路径等价和 100000 个 binary32 随机模式 | 失败不重试、不继承状态；三组路径在规范内等价 |
+| NH12 | 13 项 API 的失败、短写及恢复，formatter 分段 flush 失败，以及 bit/modff 与 fast off/on 四组浮点语料 | 失败后停止且后续调用可恢复；四组配置的 100000 个 binary32 和固定数值输出一致；各组标签语料通过且 bit/modff fast-off 规范化记录一致 |
 
 NH01-NH12 必须全部退出 0，且统一 `SUMMARY.md` 中全部为 PASS。
+
+### NHT_FMT_COMPAT 临时历史兼容性确认
+
+`NHT_FMT_COMPAT` 从 NH04 中独立出来，仅用于 formatter 性能或 Flash 优化期间按需确认
+历史兼容性。它不属于 `--all`、发布关闭条件或常规 CI；不得因为未运行该项将 NH01-NH12
+判为不完整。它是为本次 Flash 优化特制的临时测试；优化代码完成合并后退役并删除，不纳入
+后续版本的常规回归或 CI。
+
+```sh
+python3 tests/NH/run_nh.py --case NHT_FMT_COMPAT
+```
+
+默认比较 Git `release` 分支。`NHT_FMT_COMPAT_BASELINE_REF` 只能指定本地可解析为提交、
+包含旧路径 `RTT/SEGGER_RTT_printf.c`，且行为符合本用例既定兼容性差异的基线；不支持
+任意 Git ref。用例分别
+构建基线 formatter 和当前 formatter，对共同支持的 10 组格式及 512 B 长消息检查预期输出，
+并确认长消息发生分段写入。`%ld`、`%lu`、`%hd`、`%#x` 和 `%f` 按已知兼容性差异分别
+验收；返回值差异只记录，不作为失败条件。证据必须记录实际解析的基线完整 Git SHA。
+
+### NHO_LEGACY_CONFIG 可选旧配置迁移诊断
+
+`NHO_LEGACY_CONFIG` 检查已废弃的 `HARD_FPU_ENABLE` 配置必须编译失败，并且诊断明确提示改用
+`RTT_FLOAT_USE_MODFF`。该检查只服务仍需要确认旧配置迁移提示的版本，不属于 `--all`、
+发布关闭条件或常规 CI，必须显式运行：
+
+```sh
+python3 tests/NH/run_nh.py --case NHO_LEGACY_CONFIG
+```
+
+### NHT_M0_FLASH 临时 M0 fast-path Flash 对比
+
+`NHT_M0_FLASH` 使用 Cortex-M0、`-Os`、函数/数据 section 和链接期 `--gc-sections`，分别构建
+`RTT_LOG_FLOAT_FAST_PATH=1/0` 的最终 ELF，以 `text + data` 统计 Flash，并要求关闭
+fast-path 后 Flash 严格减小。实际字节数记录到证据，不作为跨工具链的固定资源保证。
+该项是当前 M0 fast-path Flash 优化的短期临时确认，完成对应优化验证后退役并删除；它不属于
+`--all`、发布关闭条件或常规 CI，必须显式运行：
+
+```sh
+python3 tests/NH/run_nh.py --case NHT_M0_FLASH
+```
 
 ## 6. HW01-HW08 执行矩阵
 

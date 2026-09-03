@@ -18,6 +18,11 @@
 - 新增工程化测试体系：`tests/NH/run_nh.py` 统一调度 NH01～NH12 主机与工程集成
   测试，`tests/HW/run_hw.py` 统一调度四类 STM32、Make/CMake 工程的 HW01～HW08
   构建、烧录、RTT 采集和判定
+- 新增非硬件测试独立命名域：`NHO_*` 表示长期可选诊断，当前包含旧配置迁移检查
+  `NHO_LEGACY_CONFIG`；`NHT_*` 表示完成对应优化确认后退役的临时测试，当前包含
+  formatter 历史兼容性检查 `NHT_FMT_COMPAT` 和 M0 fast-path Flash 对比
+  `NHT_M0_FLASH`。两类测试均须通过 `--case` 显式运行，不属于 `--all`、常规 CI 或
+  发布门禁
 - 新增集中维护的 NH/HW 测试源码、目标 fixture、共享支持文件和跨平台配置入口；
   HW 测试通过 Make/CMake overlay 注入，不要求被测工程保留测试专用源码或构建修改
 - 新增 F042/H7B0 HW08 门控吞吐协议，以及 F411 历史专用吞吐资格协议的统一 runner

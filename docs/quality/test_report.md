@@ -1,15 +1,15 @@
 # ARM_SEGGER_RTT NH 全量测试报告
 
-> 报告日期：2026-09-01
+> 报告日期：2026-09-02
 > 被测分支：`perf_flash`
-> 被测提交：`cdf2c5d60fffc7b3573fe8a2630d028abcaae445`
-> 测试方案：`docs/quality/test_plan.md`（2026-09-01 现行版）
+> 被测提交：`b0b37cba62d6745368604029719c1ce810f59e44`
+> 测试方案：`docs/quality/test_plan.md`（提交 `b0b37cb` 现行版）
 > 执行范围：NH01-NH12
-> 原始证据：`TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/`
+> 原始证据：`TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/`
 
 ## 1. 最终结论
 
-**NH 综合判定：通过。NH01-NH12 在候选提交 `cdf2c5d` 上全量运行，12/12 通过。**
+**NH 综合判定：通过。NH01-NH12 在候选提交 `b0b37cb` 上全量运行，12/12 通过。**
 
 本轮统一 runner 退出码为 0。主机质量门、API 与配置矩阵、RTT 写入路径、八个实际工程集成、资源预算、三次可复现构建以及 100000 个 binary32 随机模式全部满足测试方案的验收标准。未发现本轮 NH 范围内的未关闭产品缺陷。
 
@@ -20,7 +20,7 @@
 | 项目 | 内容 |
 |---|---|
 | 日志库 | ARM_SEGGER_RTT |
-| 候选提交 | `cdf2c5d60fffc7b3573fe8a2630d028abcaae445` |
+| 候选提交 | `b0b37cba62d6745368604029719c1ce810f59e44` |
 | 主仓库状态 | 测试启动和 runner 完成时均为干净工作树 |
 | 主机 | macOS 12.2.1（Darwin 21.3.0） |
 | Python | 3.7.7rc1 |
@@ -37,7 +37,7 @@
 
 ```sh
 python3 tests/NH/run_nh.py --all \
-  --evidence-dir TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901
+  --evidence-dir TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1
 ```
 
 NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减测试矩阵。
@@ -52,10 +52,10 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 | NH04 | formatter | 37 个当前用例、8 B 分段缓冲及 release 对比 | PASS |
 | NH05 | 浮点日志 | 28 个输出用例、bit/modff 等价及依赖裁剪 | PASS |
 | NH06 | 配置与裁剪 | 主机/Arm 配置矩阵、fast 路径及 C/ASM 选择 | PASS |
-| NH07 | 自定义配置 | 主机、Make、Cube CMake、增量重建和非法配置 | PASS |
+| NH07 | 自定义配置 | 主机、Make、Cube CMake、依赖记录、干净重建和非法配置 | PASS |
 | NH08 | RTT 写入路径 | 失败、短写、恢复、C 环形缓冲边界 | PASS |
 | NH09 | 实际工程集成 | 8 工程 Debug/Release、功能传播、ASM/C、可复现 | PASS |
-| NH10 | 资源与可复现构建 | 冻结预算、8 工程资源矩阵、三次干净构建 | PASS |
+| NH10 | 资源与可复现构建 | 144 次隔离资源构建、72 次实际工程构建、冻结预算 | PASS |
 | NH11 | typed 整数/指针 | 4 个主机 profile、64 位主机值和 M0 ELF | PASS |
 | NH12 | 回归语料 | 13 API 写入矩阵、100000 个 binary32、路径等价 | PASS |
 
@@ -83,7 +83,7 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 | F411/M4F | 通过 | 通过 | typed、typed-float、float-fast | ASM/C | PASS |
 | H7B0/M7 | 通过 | 通过 | typed、typed-float、float-fast | ASM/C | PASS |
 
-全部工程通过初始清理、Debug/Release 完整构建、无变化增量构建、清理重建、Release 哈希复现和链接产物检查。外部工程的 `ARM_SEGGER_RTT` 均解析到候选提交 `cdf2c5d60fff`。
+全部工程通过初始清理、Debug/Release 完整构建、无变化增量构建、清理重建、Release 哈希复现和链接产物检查。外部工程的 `ARM_SEGGER_RTT` 均为干净工作树并解析到完整候选提交 `b0b37cba62d6745368604029719c1ce810f59e44`。
 
 ### 4.3 实际工程默认资源
 
@@ -96,7 +96,7 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 | F411 | 4568 B / 1824 B | 4568 B / 1824 B |
 | H7B0 | 5808 B / 1832 B | 5708 B / 1832 B |
 
-隔离资源矩阵的所有最小配置、默认配置、legacy float fast、typed-only、typed-float-only、Skip C/ASM 和依赖裁剪预算均通过。矩阵内所有配置连续三次生成相同 ELF SHA-256；最大固定栈帧为 104 B，低于 256 B 门槛。
+NH10 共执行 216 次新目录构建：隔离资源矩阵 144 次，8 个实际工程的 default、Skip ASM、forced C 矩阵 72 次。所有最小配置、默认配置、formatter、typed integer、legacy float fast-off/on、Skip C/ASM 和依赖裁剪预算均通过；这些无需开发板的原 HW08 资源检查现统一由 NH10 负责。矩阵内所有配置连续三次生成相同 ELF SHA-256；最大固定栈帧为 104 B，低于 256 B 门槛。
 
 这些资源值只描述报告所列工具链、工程和有效配置，不构成其他用户工程的固定资源保证。
 
@@ -129,13 +129,13 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 
 | 范围 | 证据 |
 |---|---|
-| 汇总 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/SUMMARY.md` |
-| 各用例结果 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NHxx/result.txt` |
-| 环境与退出码 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NHxx/metadata.json` |
-| 完整运行日志 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NHxx/run.log` |
-| 覆盖率与质量门 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NH01/artifacts/quality/` |
-| 实际工程集成 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NH09/artifacts/` |
-| 资源与可复现构建 | `TEST_EVIDENCE/NH_RELEASE_cdf2c5d_20260901/NH10/artifacts/resource_usage/` |
+| 汇总 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/SUMMARY.md` |
+| 各用例结果 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NHxx/result.txt` |
+| 环境与退出码 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NHxx/metadata.json` |
+| 完整运行日志 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NHxx/run.log` |
+| 覆盖率与质量门 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NH01/artifacts/quality/` |
+| 实际工程集成 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NH09/artifacts/` |
+| 资源与可复现构建 | `TEST_EVIDENCE/NH_RELEASE_b0b37cb_20260902_RERUN1/NH10/artifacts/` |
 
 ## 8. 签署结论
 
@@ -148,4 +148,4 @@ NH09 完整执行了 M0、M3、M4F、M7 的 8 个 Make/CMake 工程，未缩减�
 | HW09 | 不属于当前发布阻塞项，未执行 |
 | 完整发布计划 | 需结合候选提交对应的 HW01-HW08 证据判定 |
 
-本报告只汇总 `cdf2c5d` 本轮统一 NH runner 产生的证据，不继承已删除运行的结果，不把外部参考工程限定为用户必须采用的配置，也不替代板级测试。
+本报告只汇总 `b0b37cb` 本轮统一 NH runner 产生的正式证据，不继承其他候选结果，不把外部参考工程限定为用户必须采用的配置，也不替代板级测试。

@@ -67,21 +67,5 @@ fi
 build_disabled float_disabled -DLOG_ENABLE_FLOAT=0
 build_disabled log_disabled -DRTT_LOG_ENABLE=0
 
-legacy_log="$BUILD_DIR/legacy-hard-fpu.log"
-if "$CC" -std=c11 -Wall -Wextra -Werror -pedantic \
-    -DHARD_FPU_ENABLE=1 \
-    -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
-    -fsyntax-only "$PROJECT_DIR/rtt_float.c" >"$legacy_log" 2>&1; then
-  printf '%s\n' 'NH05 legacy HARD_FPU_ENABLE unexpectedly compiled' >&2
-  exit 1
-fi
-if ! grep -Fq \
-    'HARD_FPU_ENABLE was renamed to RTT_FLOAT_USE_MODFF' "$legacy_log"; then
-  printf '%s\n' 'NH05 legacy HARD_FPU_ENABLE failed for an unexpected reason' >&2
-  sed -n '1,120p' "$legacy_log" >&2
-  exit 1
-fi
-
 printf '%s\n' 'NH05 PASS comparison: RTT_FLOAT_USE_MODFF=0/1 transcripts matched'
 printf '%s\n' 'NH05 PASS dependencies: soft/disabled builds have no modff reference'
-printf '%s\n' 'NH05 PASS migration: HARD_FPU_ENABLE rejected with rename diagnostic'
