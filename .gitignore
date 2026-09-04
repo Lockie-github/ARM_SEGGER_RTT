@@ -7,3 +7,5 @@ TEST_EVIDENCE/
 tests/NH/config.local.json
 tests/HW/config.local.json
 tests/legacy/
+__pycache__/
+*.py[cod]
