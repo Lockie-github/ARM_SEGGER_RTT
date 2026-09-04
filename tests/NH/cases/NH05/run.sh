@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+
+CC=${CC:-cc}
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." && pwd)
+HOST_NM=${HOST_NM:-nm}
+if [ -n "${NH_OUTPUT_DIR:-}" ]; then
+  BUILD_DIR=$NH_OUTPUT_DIR
+  mkdir -p "$BUILD_DIR"
+  KEEP_BUILD=1
+else
+  BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rtt-nh05-test.XXXXXX")
+  KEEP_BUILD=0
+fi
+
+cleanup() {
+  if [ "$KEEP_BUILD" -eq 0 ]; then
+    rm -rf "$BUILD_DIR"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+build_enabled() {
+  name=$1
+  use_modff=$2
+  shift 2
+  "$CC" -std=c11 -Wall -Wextra -Werror -pedantic \
+    -DRTT_FLOAT_USE_MODFF="$use_modff" \
+    -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
+    "$PROJECT_DIR/rtt_printf.c" \
+    "$PROJECT_DIR/rtt_log.c" \
+    "$PROJECT_DIR/rtt_float.c" \
+    "$SCRIPT_DIR/rtt_float_nh05_test.c" \
+    -o "$BUILD_DIR/$name" "$@"
+  "$BUILD_DIR/$name" >"$BUILD_DIR/$name.out"
+}
+
+build_disabled() {
+  name=$1
+  shift
+  "$CC" -std=c11 -Wall -Wextra -Werror -pedantic \
+    -DRTT_FLOAT_USE_MODFF=1 "$@" \
+    -I"$PROJECT_DIR" -I"$PROJECT_DIR/RTT" \
+    "$PROJECT_DIR/rtt_printf.c" \
+    "$PROJECT_DIR/rtt_log.c" \
+    "$PROJECT_DIR/rtt_float.c" \
+    "$SCRIPT_DIR/rtt_float_disabled_nh05_test.c" \
+    -o "$BUILD_DIR/$name"
+  "$BUILD_DIR/$name"
+  if "$HOST_NM" -u "$BUILD_DIR/$name" | grep -q 'modff'; then
+    printf 'NH05 %s unexpectedly references modff\n' "$name" >&2
+    return 1
+  fi
+}
+
+build_enabled soft 0
+build_enabled hard 1 -lm
+cmp "$BUILD_DIR/soft.out" "$BUILD_DIR/hard.out"
+sed -n '1,120p' "$BUILD_DIR/soft.out"
+
+if "$HOST_NM" -u "$BUILD_DIR/soft" | grep -q 'modff'; then
+  printf '%s\n' 'NH05 soft path unexpectedly references modff' >&2
+  exit 1
+fi
+
+build_disabled float_disabled -DLOG_ENABLE_FLOAT=0
+build_disabled log_disabled -DRTT_LOG_ENABLE=0
+
+printf '%s\n' 'NH05 PASS comparison: RTT_FLOAT_USE_MODFF=0/1 transcripts matched'
+printf '%s\n' 'NH05 PASS dependencies: soft/disabled builds have no modff reference'

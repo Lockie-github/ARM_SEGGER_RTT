@@ -1,0 +1,13 @@
+#ifndef ARM_SEGGER_RTT_CFG_H
+#define ARM_SEGGER_RTT_CFG_H
+
+#define RTT_USER_CFG_ENABLE 0
+#if RTT_USER_CFG_ENABLE
+#define SEGGER_RTT_MAX_NUM_UP_BUFFERS   9
+#define SEGGER_RTT_MAX_NUM_DOWN_BUFFERS 9
+#define BUFFER_SIZE_UP                  9
+#define BUFFER_SIZE_DOWN                9
+#define SEGGER_RTT_PRINTF_BUFFER_SIZE   9u
+#endif
+
+#endif

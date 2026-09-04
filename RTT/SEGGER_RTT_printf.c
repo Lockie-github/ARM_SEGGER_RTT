@@ -225,17 +225,19 @@ static void _PrintUnsigned(SEGGER_RTT_PRINTF_DESC * pBufferDesc, unsigned v, uns
 *       _PrintInt
 */
 static void _PrintInt(SEGGER_RTT_PRINTF_DESC * pBufferDesc, int v, unsigned Base, unsigned NumDigits, unsigned FieldWidth, unsigned FormatFlags) {
+  unsigned Magnitude;
   unsigned Width;
-  int Number;
+  unsigned Number;
 
-  Number = (v < 0) ? -v : v;
+  Magnitude = (v < 0) ? (0u - (unsigned)v) : (unsigned)v;
+  Number = Magnitude;
 
   //
   // Get actual field width
   //
   Width = 1u;
-  while (Number >= (int)Base) {
-    Number = (Number / (int)Base);
+  while (Number >= Base) {
+    Number = (Number / Base);
     Width++;
   }
   if (NumDigits > Width) {
@@ -264,7 +266,6 @@ static void _PrintInt(SEGGER_RTT_PRINTF_DESC * pBufferDesc, int v, unsigned Base
   //
   if (pBufferDesc->ReturnValue >= 0) {
     if (v < 0) {
-      v = -v;
       _StoreChar(pBufferDesc, '-');
     } else if ((FormatFlags & FORMAT_FLAG_PRINT_SIGN) == FORMAT_FLAG_PRINT_SIGN) {
       _StoreChar(pBufferDesc, '+');
@@ -290,7 +291,7 @@ static void _PrintInt(SEGGER_RTT_PRINTF_DESC * pBufferDesc, int v, unsigned Base
         //
         // Print number without sign
         //
-        _PrintUnsigned(pBufferDesc, (unsigned)v, Base, NumDigits, FieldWidth, FormatFlags);
+        _PrintUnsigned(pBufferDesc, Magnitude, Base, NumDigits, FieldWidth, FormatFlags);
       }
     }
   }
@@ -379,9 +380,14 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
       if (c == '.') {
         sFormat++;
         if (*sFormat == '*') {
+          int PrecisionArg;
+
           sFormat++;
-          PrecisionSet = 1;
-          Precision = va_arg(*pParamList, int);
+          PrecisionArg = va_arg(*pParamList, int);
+          if (PrecisionArg >= 0) {
+            PrecisionSet = 1;
+            Precision = (unsigned)PrecisionArg;
+          }
         } else {
           do {
             c = *sFormat;
@@ -406,6 +412,9 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
           break;
         }
       } while (1);
+      if (c == '\0') {
+        break;
+      }
       //
       // Handle specifiers
       //
@@ -422,13 +431,11 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
         _PrintInt(&BufferDesc, v, 10u, Precision, FieldWidth, FormatFlags);
         break;
       case 'u':
-        v = va_arg(*pParamList, int);
-        _PrintUnsigned(&BufferDesc, (unsigned)v, 10u, Precision, FieldWidth, FormatFlags);
+        _PrintUnsigned(&BufferDesc, va_arg(*pParamList, unsigned), 10u, Precision, FieldWidth, FormatFlags);
         break;
       case 'x':
       case 'X':
-        v = va_arg(*pParamList, int);
-        _PrintUnsigned(&BufferDesc, (unsigned)v, 16u, Precision, FieldWidth, FormatFlags);
+        _PrintUnsigned(&BufferDesc, va_arg(*pParamList, unsigned), 16u, Precision, FieldWidth, FormatFlags);
         break;
       case 's':
         {
@@ -447,13 +454,14 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
               break;
             }
             _StoreChar(&BufferDesc, c);
-            Precision--;
+            if (PrecisionSet != 0) {
+              Precision--;
+            }
           } while (BufferDesc.ReturnValue >= 0);
         }
         break;
       case 'p':
-        v = va_arg(*pParamList, int);
-        _PrintUnsigned(&BufferDesc, (unsigned)v, 16u, 8u, 8u, 0u);
+        _PrintUnsigned(&BufferDesc, (unsigned)(uintptr_t)va_arg(*pParamList, void *), 16u, 8u, 8u, 0u);
         break;
       case '%':
         _StoreChar(&BufferDesc, '%');
@@ -472,9 +480,10 @@ int SEGGER_RTT_vprintf(unsigned BufferIndex, const char * sFormat, va_list * pPa
     // Write remaining data, if any
     //
     if (BufferDesc.Cnt != 0u) {
-      SEGGER_RTT_Write(BufferIndex, acBuffer, BufferDesc.Cnt);
+      if (SEGGER_RTT_Write(BufferIndex, acBuffer, BufferDesc.Cnt) != BufferDesc.Cnt) {
+        BufferDesc.ReturnValue = -1;
+      }
     }
-    BufferDesc.ReturnValue += (int)BufferDesc.Cnt;
   }
   return BufferDesc.ReturnValue;
 }

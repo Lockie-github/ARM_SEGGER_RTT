@@ -1,532 +1,135 @@
+> **文档版本：3.0.1（2026/09/01）｜最近变化：新增测试章节、快速命令和现行测试文档导航。详情见 [修订记录](#修订记录)。**
+
 # 目录
 - [目录](#目录)
 - [描述](#描述)
+- [快速开始](#快速开始)
 - [移植](#移植)
-  - [Make](#make)
-  - [CMake](#cmake)
-    - [配置、编译和烧录](#配置编译和烧录)
-      - [Debug](#debug)
-      - [Release](#release)
-      - [其他常用命令](#其他常用命令)
-    - [常见问题](#常见问题)
-- [修订记录:](#修订记录)
+- [日志配置](#日志配置)
+- [API](#api)
+- [测试](#测试)
+- [对源码的修改](#对源码的修改)
+- [修订记录](#修订记录)
 - [更新记录](#更新记录)
-  - [\[2.1.0\] - 2026-07-30](#210---2026-07-30)
-    - [Added](#added)
-    - [Changed](#changed)
-  - [\[2.0.2\] - 2026-07-01](#202---2026-07-01)
-    - [Fixed](#fixed)
-  - [\[2.0.1\] - 2026-04-07](#201---2026-04-07)
-    - [Changed](#changed-1)
-  - [\[2.0.0\] - 2026-03-27](#200---2026-03-27)
-    - [Added](#added-1)
-    - [Changed](#changed-2)
-  - [\[1.0.2\]](#102)
-  - [\[1.0.1\]](#101)
-  - [\[1.0.0\]](#100)
 
 ---
 
 # 描述
-1. 这是从SEGGER官网获取的8.64a版本的RTT文件,用于查看调试日志
-2. 引入了jlink烧录、擦除的脚本,两个文件都位于`ARM_SEGGER_RTT/jlinkscript`
-3. 适配了STM32CubeMX生成的make工程,移植请看[Make](#make)
-4. 适配了STM32CubeMX生成的cmake工程(cube-Cmake STM32 for vscode插件内置的cmake),移植请看[CMake](#cmake)
-5. 建议直接引用本文件为submodbule
+
+1. 本仓库基于 SEGGER RTT 8.64a，为 Cortex-M 目标提供可配置的 RTT 日志接口。
+2. 编译和链接本库不依赖 J-Link。查看 RTT 输出需要支持 RTT 的调试探针及主机工具。
+3. 本仓库提供 J-Link Commander、RTT Telnet、烧录和擦除辅助命令，
+   相关脚本位于 `ARM_SEGGER_RTT/jlinkscript`。
+4. 支持 STM32CubeMX 生成的 Make 工程，移植方式见 [Make](docs/port.md#make)。
+5. 支持 STM32CubeMX 生成的 CMake 工程，以及 STM32 VS Code 插件提供的
+   `cube-cmake`，移植方式见 [CMake](docs/port.md#cmake)。
+6. 建议将本仓库作为 Git submodule 引入主工程。
+
+---
+
+# 快速开始
+
+请查阅 [快速开始](docs/quick-start.md)
 
 ---
 
 # 移植
-## Make
-1. 拉取本仓库到STM32CubeMX生成的Makefile工程路径下
-2. 在生成的工程的Makefile文件中的指定位置分别加入以下代码:
-```Makefile
 
-include ARM_SEGGER_RTT/segger_rtt.mk
-EXTRA_INCLUDES := $(patsubst %,-I%,$(EXTRA_INCLUDES))
-C_SOURCES += $(EXTRA_C_SOURCES)
-C_INCLUDES += $(EXTRA_INCLUDES)
-# compile gcc flags
-
-# *** EOF ***
-
-# 自动从ioc文件中提取MCU_ID,仅限STM32CubeMX(STM32CubeMX2不行)
-IOC_FILE := $(wildcard *.ioc)
-ifeq ($(IOC_FILE),)
-  $(error 未找到 .ioc 文件)
-endif
-
-MCU_ID := $(shell awk -F'=' '/^ProjectManager\.DeviceId=/ { \
-  v=$$2; \
-  sub(/[A-Z]x$$/, "", v); \
-  print v; \
-  exit \
-}' "$(IOC_FILE)")
-
-ifeq ($(MCU_ID),)
-  $(error 提取 MCU 型号失败)
-endif
-
-# 若自动不行就手动配置
-# MCU_ID = 
-
-# ifeq ($(MCU_ID),)
-#     $(error 请配置 MCU 值)
-# endif
-
-info:
-	@echo "MCU: $(MCU_ID)"
-	@echo "TARGET: $(TARGET)"
-
-erase:
-	@echo "Erase chip..."
-	-JLinkExe  -Device $(MCU_ID) -CommandFile ./ARM_SEGGER_RTT/jlinkscript/erase.jlink
-
-run:
-	@echo "Try to run MCU"
-	-JLinkExe  -Device $(MCU_ID) -if SWD -Speed 24000 -RTTTelnetPort 9999 -autoconnect 1
-
-rtt:
-	@echo "rtt..."
-	while true; do sleep 1; telnet 127.0.0.1 9999; done
-
-# nc版本,仅限MacOS
-# 	@echo "Starting RTT client (nc)..."
-# 	@while true; do \
-# 		echo "Connecting to RTT..."; \
-# 		nc 127.0.0.1 9999 || echo "Connection lost. Retrying in 1s..."; \
-# 		sleep 1; \
-# 	done
-
-rttts:
-	@make rtt | ts '%H:%M:%S'
-
-LOGDIR := logs
-
-RTT_LOGFILE := $(LOGDIR)/$(shell date +%Y%m%d_%H%M%S).log
-
-rttlog:
-	@mkdir -p "$(LOGDIR)"
-	@make rtt | ts '%Y-%m-%d %H:%M:%S' | tee "$(RTT_LOGFILE)"
-.PHONY: rttlog
-
-flash: all
-	@echo "Uploading to firmware..."
-	@sed -e "s|{{BUILD_DIR}}|$(BUILD_DIR)|g" \
-	     -e "s|{{TARGET}}|$(TARGET)|g" \
-	     ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > $(BUILD_DIR)/flash.jlink
-	JLinkExe -Device $(MCU_ID) -CommandFile $(BUILD_DIR)/flash.jlink
-
-fr:
-	@echo "flash & run"
-	$(MAKE) flash
-	$(MAKE) run
-# ============ Flash/RAM Analysis Targets ============
-# .PHONY: analyze analyze-printf analyze-symbols analyze-flash
-
-# # 主分析命令：显示 printf 相关符号 + 按大小排序的符号表 + 内存摘要
-# analyze: analyze-flash analyze-printf analyze-symbols
-
-# # 显示 Flash/RAM 使用摘要
-# analyze-flash:
-# 	@echo
-# 	@echo "Memory Usage Summary for $(TARGET).elf"
-# 	@$(SZ) $(BUILD_DIR)/$(TARGET).elf
-# 	@echo
-# 	@$(PREFIX)size -A $(BUILD_DIR)/$(TARGET).elf | grep -E "\.(text|data|bss)" | \
-# 		awk '{printf "  \033[0;34m%-8s\033[0m %6d bytes (%.1f KB)\n", $$1, $$2, $$2/1024}'
-
-# # 分析 printf/vsnprintf 相关符号
-# analyze-printf:
-# 	@echo
-# 	@echo "Searching for printf/vsnprintf related symbols:"
-# 	@$(PREFIX)objdump -t $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
-# 		grep -i "printf\|vsnprintf" | \
-# 		sed 's/^/   /' || echo "   \033[0;32m✓ No printf/vsnprintf symbols found.\033[0m"
-
-# # 分析最大符号（按大小排序，显示最大的20个）
-# analyze-symbols:
-# 	@echo
-# 	@echo "Top 20 Largest Symbols by Size:"
-# 	@$(PREFIX)nm --print-size -S $(BUILD_DIR)/$(TARGET).elf 2>/dev/null | \
-# 		sort -k2 -g | tail -20 | \
-# 		awk '{printf "   \033[0;35m%6s B\033[0m | %s\n", $$2, $$4}' || echo "   \033[0;31m✗ Failed to analyze symbols (check .elf exists)\033[0m"
-```
-
-## CMake
-1. 拉取本仓库到STM32CubeMX生成的CMake工程路径下
-2. 在工程根目录的`CMakeLists.txt`中添加
-    1. 在 `# Add STM32CubeMX generated sources`后添加
-    ```CMake
-    add_subdirectory(ARM_SEGGER_RTT) 
-    ```
-    2. 在 `# Add user defined libraries`后添加
-    ```CMake
-    arm_segger_rtt
-    ``` 
-    3. 在末尾添加
-    ```CMake
-    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.bin
-        COMMAND ${CMAKE_OBJCOPY} -O ihex ${CMAKE_PROJECT_NAME}.elf ${CMAKE_PROJECT_NAME}.hex
-        COMMENT "Generating binary and hex files"
-        BYPRODUCTS ${CMAKE_PROJECT_NAME}.bin ${CMAKE_PROJECT_NAME}.hex
-        VERBATIM
-        message("Build type: " ${CMAKE_BUILD_TYPE})
-    )
-    ```
-3. 复制文件夹内的Makefile文件到项目根目录下或在根目录touch一个Makefile文件并添加以下源码: 
-```Makefile
-BUILD_DIR = build
-
-# 自动从ioc文件中提取MCU_ID,仅限STM32CubeMX(STM32CubeMX2不行)
-IOC_FILE := $(wildcard *.ioc)
-ifeq ($(IOC_FILE),)
-  $(error 未找到 .ioc 文件)
-endif
-
-MCU_ID := $(shell awk -F'=' '/^ProjectManager\.DeviceId=/ { \
-  v=$$2; \
-  sub(/[A-Z]x$$/, "", v); \
-  print v; \
-  exit \
-}' "$(IOC_FILE)")
-
-ifeq ($(MCU_ID),)
-  $(error 提取 MCU 型号失败)
-endif
-
-# 若自动不行就手动配置
-# MCU_ID = 
-
-# ifeq ($(MCU_ID),)
-#     $(error 请配置 MCU 值)
-# endif
-
-# 从CMakeLists.txt中提取hex文件名
-CMAKE_LISTS := CMakeLists.txt
-
-TARGET := $(shell grep "set(CMAKE_PROJECT_NAME" $(CMAKE_LISTS) 2>/dev/null | \
-         sed 's/set(CMAKE_PROJECT_NAME \([^)]*\))/\1/')
-
-ifeq ($(TARGET),)
-    $(warning CMAKE_PROJECT_NAME not found in CMakeLists.txt)
-    TARGET := unknown
-endif
-
-# 若自动不行就手动配置
-# TARGET = 
-
-# ifeq ($(TARGET),)
-#     $(error 请配置 TARGET 值)
-# endif
-
-info:
-	@echo "MCU: $(MCU_ID)"
-	@echo "TARGET: $(TARGET)"
-erase:
-	@echo "Erase chip..."
-	-JLinkExe  -Device $(MCU_ID) -CommandFile ./ARM_SEGGER_RTT/jlinkscript/erase.jlink
-
-run:
-	@echo "Try to run MCU"
-	-JLinkExe  -Device $(MCU_ID) -if SWD -Speed 2400 -RTTTelnetPort 9999 -autoconnect 1
-
-rtt:
-	@echo "rtt..."
-	while true; do sleep 1; telnet 127.0.0.1 9999; done
-
-# nc版本,仅限MacOS
-# 	@echo "Starting RTT client (nc)..."
-# 	@while true; do \
-# 		echo "Connecting to RTT..."; \
-# 		nc 127.0.0.1 9999 || echo "Connection lost. Retrying in 1s..."; \
-# 		sleep 1; \
-# 	done
-
-rttts:
-	@make rtt | ts '%H:%M:%S'
-
-LOGDIR := logs
-
-RTT_LOGFILE := $(LOGDIR)/$(shell date +%Y%m%d_%H%M%S).log
-
-rttlog:
-	@mkdir -p "$(LOGDIR)"
-	@make rtt | ts '%Y-%m-%d %H:%M:%S' | tee "$(RTT_LOGFILE)"
-.PHONY: rttlog
-
-# 构建Debug配置
-preset_debug:
-	-rm -fR $(BUILD_DIR)/Debug 
-	cube-cmake \
-		  -DCMAKE_BUILD_TYPE=Debug \
-	      -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake \
-	      -S . \
-	      -B $(BUILD_DIR)/Debug \
-	      -G Ninja
-
-# 构建Release配置
-preset_release:
-	-rm -fR $(BUILD_DIR)/Release 
-	cube-cmake \
-		  -DCMAKE_BUILD_TYPE=Release \
-	      -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake \
-	      -S . \
-	      -B $(BUILD_DIR)/Release \
-	      -G Ninja
-# 编译Debug配置
-d:
-	cube-cmake --build $(BUILD_DIR)/Debug --target clean --
-	cube-cmake --build $(BUILD_DIR)/Debug --target all --
-
-# 编译Release配置
-r:
-	cube-cmake --build $(BUILD_DIR)/Release --target clean --
-	cube-cmake --build $(BUILD_DIR)/Release --target all --
-
-debug:d
-	@echo "Uploading to firmware..."
-	@sed -e "s|{{BUILD_DIR}}|$(BUILD_DIR)/Debug|g" \
-	     -e "s|{{TARGET}}|$(TARGET)|g" \
-	     ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > $(BUILD_DIR)/Debug/flash.jlink
-	JLinkExe -Device $(MCU_ID) -CommandFile $(BUILD_DIR)/Debug/flash.jlink
-
-release:r
-	@echo "Uploading to firmware..."
-	@sed -e "s|{{BUILD_DIR}}|$(BUILD_DIR)/Release|g" \
-	     -e "s|{{TARGET}}|$(TARGET)|g" \
-	     ./ARM_SEGGER_RTT/jlinkscript/flash.jlink > $(BUILD_DIR)/Release/flash.jlink
-	JLinkExe -Device $(MCU_ID) -CommandFile $(BUILD_DIR)/Release/flash.jlink
-
-dr:debug
-	make run
-
-rr:release
-	make run
-
-clean:
-	-rm -fR build
-
-```
-
-### 配置、编译和烧录
-
-首次使用新工程时，STM32Cube 插件可能尚未将其识别为 STM32Cube 工程。请先完成以下操作：
-
-1. 使用 VS Code 打开 STM32CubeMX 生成的工程根目录。
-2. 如果 VS Code 弹出“是否加载为 STM32Cube 工程”的提示，请确认加载。
-3. 如果没有出现提示，按 `Cmd+Shift+P`（Windows/Linux 为 `Ctrl+Shift+P`）打开命令面板，执行 `STM32Cube: Set up STM32Cube projects`，然后选择当前工程并完成设置。
-4. 设置完成后关闭已有终端，并新建一个 VS Code 集成终端，使插件提供的工具路径生效。
-5. 在新终端中确认 `cube-cmake` 可用：
-
-```shell
-command -v cube-cmake
-cube-cmake --version
-```
-
-以下命令均在工程根目录的 VS Code 集成终端中执行。
-
-#### Debug
-
-首次构建或 CMake 配置发生变化后，先生成 Debug 构建目录：
-
-```shell
-make preset_debug
-```
-
-然后编译 Debug 固件：
-
-```shell
-make d
-```
-
-也可以连续完成配置和编译：
-
-```shell
-make preset_debug && make d
-```
-
-编译并通过 J-Link 烧录 Debug 固件：
-
-```shell
-make debug
-```
-
-`make debug` 会先执行 Debug 编译，再生成 J-Link 下载脚本并烧录固件。它要求已经执行过 `make preset_debug`，并且系统中可以找到 `JLinkExe`。
-
-#### Release
-
-生成 Release 构建目录并编译：
-
-```shell
-make preset_release
-make r
-```
-
-也可以连续执行：
-
-```shell
-make preset_release && make r
-```
-
-编译并通过 J-Link 烧录 Release 固件：
-
-```shell
-make release
-```
-
-#### 其他常用命令
-
-```shell
-make info       # 显示从 .ioc 和 CMakeLists.txt 中解析出的 MCU 与目标名称
-make clean      # 删除整个 build 目录
-make erase      # 使用 J-Link 擦除芯片
-make run        # 启动 J-Link 并连接 RTT
-make rtt        # 连接 RTT Telnet 端口
-make rttlog     # 将带时间戳的 RTT 输出保存到 logs 目录
-```
-
-`preset_debug` 和 `preset_release` 会先删除对应的构建目录再重新生成，因此修改工具链文件、生成器或重要 CMake 配置后应重新执行相应的 preset 命令；仅修改 C/C++ 源文件时，直接执行 `make d` 或 `make r` 即可。
-
-### 常见问题
-
-1.  `cube-cmake: No such file or directory`
-
-如果执行 Makefile 时出现 `make: cube-cmake: No such file or directory`，通常表示当前工程尚未完成 STM32Cube 设置，或者终端是在插件加载前创建的。执行 `STM32Cube: Set up STM32Cube projects` 后重新新建集成终端即可。
-
-可以使用以下命令确认当前终端是否能够找到插件提供的 CMake：
-
-```shell
-command -v cube-cmake
-cube-cmake --version
-```
-
-2. 执行 `make d` 或 `make r` 时提示构建目录不存在
-
-`make d` 和 `make r` 只负责编译已经配置好的构建目录。新工程、执行过 `make clean`，或者相应构建目录被删除后，需要先生成构建目录：
-
-```shell
-make preset_debug    # 对应 make d
-make preset_release  # 对应 make r
-```
-
-3. CMake 提示找不到 Ninja 或 ARM GCC
-
-如果出现 `CMAKE_MAKE_PROGRAM is not set`、`Ninja not found` 或找不到 `arm-none-eabi-gcc`，请确认 STM32Cube 工程设置中已经安装并选择 Ninja 与 GNU Tools for STM32。完成设置后重新新建 VS Code 集成终端，再检查工具是否可用：
-
-```shell
-ninja --version
-arm-none-eabi-gcc --version
-```
-
-如果更换过工具链版本，请重新执行 `make preset_debug` 或 `make preset_release`，不要继续使用旧的 CMake 缓存。
-
-4. Makefile 提示未找到 `.ioc` 文件或提取 MCU 型号失败
-
-Makefile 必须在包含 `.ioc` 文件的工程根目录执行，并通过 `.ioc` 文件中的 `ProjectManager.DeviceId` 自动获取 J-Link 设备名称。请先确认当前目录和解析结果：
-
-```shell
-pwd
-ls *.ioc
-make info
-```
-
-部分 STM32CubeMX 版本或芯片生成的 `.ioc` 文件可能没有可用的 `ProjectManager.DeviceId`。此时需要在工程根目录的 Makefile 中手动设置 `MCU_ID`，其值应使用 J-Link 支持的设备名称。
-
-5. `make info` 显示 `TARGET: unknown`
-
-Makefile 会从工程根目录的 `CMakeLists.txt` 中解析以下配置：
-
-```cmake
-set(CMAKE_PROJECT_NAME your_project_name)
-```
-
-如果工程使用了不同写法，自动解析可能失败。请保持上述格式，或者在 Makefile 中手动设置 `TARGET`。`TARGET` 必须与最终生成的 `.elf`、`.hex` 文件名一致。
-
-6. `JLinkExe: command not found`
-
-`make debug`、`make release`、`make erase` 和 `make run` 都依赖 SEGGER J-Link。请先安装 J-Link Software and Documentation Pack，并确保 `JLinkExe` 已加入 `PATH`：
-
-```shell
-command -v JLinkExe
-JLinkExe -version
-```
-
-7. 烧录时提示找不到 HEX 文件
-
-请确认编译已经成功，并且工程根目录的 `CMakeLists.txt` 已按本章节说明添加生成 `.hex` 文件的 `add_custom_command`。然后执行：
-
-```shell
-make info
-find build -name '*.hex'
-```
-
-如果 `make info` 显示的 `TARGET` 与实际 HEX 文件名不同，请修正 Makefile 中的 `TARGET` 后重新烧录。
-
-8. RTT 提示连接被拒绝或一直无法连接
-
-`make rtt` 只连接本机的 RTT Telnet 端口，不会自行启动 J-Link。请先在一个终端执行 `make run` 并保持其运行，再在另一个终端执行 `make rtt`。同时确认开发板已连接、`MCU_ID` 正确，并且端口 `9999` 没有被其他程序占用。
-
-8. `ts: command not found`
-
-`make rttts` 和 `make rttlog` 使用 `ts` 为日志添加时间戳。没有安装 `ts` 时仍可使用不带时间戳的 `make rtt`；如需时间戳功能，请安装提供 `ts` 命令的 `moreutils` 工具包。
-
-# 修订记录:
-| 文档版本 | 修订时间 | 修改内容 | 备注 |
-|--|--|--|--|
-|1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
-|1.0.1|2026/04/07|修改了移植描述,[位于移植/Make/2.](#make)||
-|1.0.0|2026/03/27|更改了文档的结构||
+Make、CMake 工程的接入方法，以及配置、编译、烧录和常见问题，请查看[移植指南](docs/port.md)。
 
 ---
 
+# 日志配置
+
+日志总开关默认已开启。
+不确定应使用 Full、Lite、Typed 还是 Float 时，请先查看[输出模式指南](docs/Mode%20declaration.md)。
+全部配置宏、默认值、推荐组合和配置覆盖规则，请查看[日志配置指南](docs/Configuration.md)。
+
+---
+
+# API
+
+应用代码包含 `rtt_log.h` 后即可输出日志：
+
+```c
+#include "rtt_log.h"
+
+log_info("system ready");
+log_debug("counter=%u", 42u);
+log_warn("voltage=%u mV", 3250u);
+log_err("status=%d", -1);
+```
+
+完整 API 列表、输出规则、格式化支持和边界行为，请查看[API 指南](docs/API%20declaration.md)。
+
+---
+
+# 测试
+
+本仓库将现行测试分为两类，并通过统一 runner 调度：
+
+| 测试集 | 范围 | 统一入口 | 环境要求 |
+|---|---|---|---|
+| NH01～NH12 | 主机行为、格式化、配置、代码裁剪、工程集成、资源和回归测试 | `tests/NH/run_nh.py` | macOS，或 Windows + Git Bash；NH09/NH10 还需要外部 STM32 工程和 Arm 工具链 |
+| NHO/NHT | 可选迁移诊断及临时优化确认，不属于发布或常规 CI 门禁 | `tests/NH/run_nh.py --case CASE_ID` | 具体依赖和生命周期见 NH 测试说明 |
+| HW01～HW08 | MCU 输出、重连、边界、并发、吞吐、资源和栈测试 | `tests/HW/run_hw.py` | STM32 目标板、J-Link、Arm 工具链及对应 Make/CMake 工程 |
+
+列出测试或运行完整 NH 测试：
+
+```sh
+python3 tests/NH/run_nh.py --list
+python3 tests/NH/run_nh.py --all
+python3 tests/HW/run_hw.py --list
+```
+
+运行一个硬件用例：
+
+```sh
+python3 tests/HW/run_hw.py \
+  --target f103_make --case HW01 --build-type release
+```
+
+HW fixture、编译宏、链接 wrapper 和测试入口均由主仓库集中维护。Make 与 CMake
+测试通过 overlay 注入所需配置，不要求在被测工程的 `main.c`、中断源码、Makefile、
+`CMakeLists.txt`、linker script 或 `rtt_cfg.h` 中保留测试改动。F042、H7B0 的门控
+HW08 及 F411 的历史吞吐资格协议也由同一 HW runner 执行和判定。
+
+runner 默认将日志、构建产物、RTT 原始数据和判定结果写入 `TEST_EVIDENCE/`，并拒绝
+静默覆盖已有证据。该目录默认不提交到 Git；发布结论应通过候选提交 SHA、测试报告和
+证据索引关联。
+
+发布阻塞范围、固定矩阵和验收标准以[现行测试计划](docs/quality/test_plan.md)为准；推荐执行顺序、
+证据布局和工程影响请查看[测试指南](tests/README.md)。平台配置与用例参数分别见
+[NH 测试说明](tests/NH/README.md)和[HW 测试说明](tests/HW/README.md)。
+
+---
+
+# 对源码的修改
+
+此章仅记录相较于SEGGER RTT 8.64a的RTT部分的源码做出的修改,方便以后使用
+
+| 文件与位置 | 修改内容 | 目的 | 引入提交 |
+|---|---|---|---|
+| `RTT/SEGGER_RTT_Conf.h`：配置声明区 | 引入 `rtt_cfg.h`，并将 `RTT_WRITE_SKIP_USE_ASM` 默认设为 `0` | 支持应用工程统一配置 RTT，同时保持默认 C 写入路径不变 | `d497659` 引入配置入口；`cc65eb3` 增加 Skip 汇编开关 |
+| `RTT/SEGGER_RTT.c`：`SEGGER_RTT_WriteNoLock()` 的 `SEGGER_RTT_MODE_NO_BLOCK_SKIP` 分支 | Skip 模式可按配置调用 `SEGGER_RTT_WriteSkipNoLock()` 汇编实现，并转换返回值、处理零长度写入 | 在支持汇编的 Cortex-M 目标上在极短包、特定缓冲状态和特定构建中可能缩短非阻塞写入路径，同时保持 `SEGGER_RTT_WriteNoLock()` 的返回语义 | `2227ae9` 引入汇编路径；`cc65eb3` 增加独立开关 |
+| `RTT/SEGGER_RTT_printf.c`：`_PrintInt()` | 在无符号域计算负数绝对值 | 避免格式化 `INT_MIN` 时发生有符号溢出 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的动态精度解析 | 动态精度先按 `int` 读取，负值视为未指定精度 | 使 `%.*s` 的负精度行为正确 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的转换符解析 | 遇到结尾不完整的转换格式时停止解析 | 避免越过格式字符串结尾读取 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的 `%u`、`%x`、`%X`、`%s` 和 `%p` 分支 | 按正确类型读取无符号数和指针；仅在设置字符串精度时递减计数 | 修正可变参数类型并避免无意义的精度回绕 | `2ec88a7` |
+| `RTT/SEGGER_RTT_printf.c`：`SEGGER_RTT_vprintf()` 的尾部缓冲写入 | 检查最后一批数据是否完整写入，不再重复累加缓冲长度 | 写入失败时返回 `-1`，成功时返回准确字符数 | `2ec88a7` |
+
+# 修订记录
+| 文档版本 | 修订时间 | 修改内容 | 备注 |
+|--|--|--|--|
+|3.0.1|2026/09/01|README 新增测试章节，说明 NH/HW 测试分类、适用环境、快速命令、工程影响和证据管理，并补充现行测试计划及详细测试指南的文档入口；同步文档版本和最近变化说明||
+|3.0.0|2026/08/28|将 README 重构为文档入口，新增文档版本和最近变化；将 submodule 引入、Make/CMake 接入、首条日志输出和 RTT 连接流程整理至 `docs/quick-start.md`；将移植步骤、RTT 主机连接、迁移验收和常见问题整理至 `docs/port.md`；将模式选择、全部配置项及完整 API 分别整理至 `docs/Mode declaration.md`、`docs/Configuration.md` 和 `docs/API declaration.md`，明确各文档职责与阅读顺序，README 仅保留最小使用示例及对应入口||
+|2.1.1|2026/08/21|新增 `RTT_LOG_FLOAT_FAST_PATH` 编译期开关；消除 Cortex-M0 快速路径的整数除法运行库依赖；说明浮点直写性能与目标相关的 Flash 取舍，并补充 `RTT_WRITE_SKIP_USE_ASM` 独立分发开关；新增“对源码的修改”章节，按文件、函数或代码分支记录相对 `release` 的 RTT 源码修改、目的及引入提交||
+|2.1.0|2026/08/19|新增 `RTT_USER_CFG_ENABLE` 自定义配置启用方式；补充完整日志、Lite 等级日志和极致精简模式；强化 `log_print`、`log_string` 的效率与 Flash 定位，并完善浮点转换配置说明||
+|2.0.0|2026/08/13|重构 README 文档结构，将移植指南和更新记录拆分为独立文档；同步日志配置、API、精简格式化器及构建接入说明||
+|1.1.0|2026/07/30|完善 CMake 构建、烧录和常见问题说明，修订记录与更新记录改为倒序排列||
+|1.0.1|2026/04/07|修改了移植描述，[位于移植/Make/2.](port.md#make)||
+|1.0.0|2026/03/27|更改了文档的结构||
+
 # 更新记录
-## [2.1.0] - 2026-07-30
-### Added
-  - 新增`dr`和`rr`目标,支持Debug/Release固件编译、烧录后直接运行
-  - 新增STM32Cube CMake工程配置、编译、烧录说明和常见问题章节
 
-### Changed
-  - 修订记录和更新记录改为倒序排列,优先显示最新版本
-
-## [2.0.2] - 2026-07-01
-### Fixed
-  - 修复当芯片型号带特殊版本后缀时自动获取MCU_ID错误的bug
-
-## [2.0.1] - 2026-04-07
-### Changed
-  - 修改了segger_rtt.mk的变量命名,语义表达更清晰,风格与ST更相近
-
-## [2.0.0] - 2026-03-27
-### Added
-  - 新增对Cmake的支持
-
-### Changed
-  - 修改了下载脚本,兼容Cmake与Make,注:脚本已不再兼容V1.0.0
-
-## [1.0.2]
-  1. 添加了带时间戳的日志,需要安装ts工具
-  2. 若不方便安装ts 也可使用bash或gwk
-   ```bash
-    make rtt | while IFS= read -r line; do
-    echo "$(date '+%Y-%m-%d %H:%M:%S') $line"
-    done | tee  "$(RTT_LOGFILE)"
-   ```
-    ```
-    make rtt | gawk '{ print strftime("%Y-%m-%d %H:%M:%S"), $0 }' | tee  "$(RTT_LOGFILE)"
-    ```
-
-## [1.0.1]
-  1. 添加有FPU的MCU浮点型处理逻辑,提高性能
-  2. 增加浮点型NAN等特殊值的处理
-
-## [1.0.0]
-  1. 源自于SEGGER_RTT_V864a
-  2. 添加了分级日志功能,全部开启Flash占用约7.7K
-     1. 添加了浮点打印支持
-     2. 拥有超时机制
-     3. 拥有颜色等级区分
-  3. 添加了lite等级,Flash占用约3.9K
-     1. 仅保留基础打印功能
-     2. 该功能开启后除浮点外的分级日志将全部关闭
+项目的版本更新内容和历史变更请查看 [CHANGELOG.md](CHANGELOG.md)。
